@@ -49,7 +49,7 @@ function publicCatalog(data) {
   } };
 }
 
-function recordPurchase(data, request) {
+function recordPurchase(data, request, user) {
   if (!request || !Number.isSafeInteger(request.revision) || typeof request.productId !== 'string'
     || !Number.isSafeInteger(request.quantity) || request.quantity < 1) {
     return { status: 400, error: 'Choose a product and a positive whole-number quantity.' };
@@ -64,12 +64,13 @@ function recordPurchase(data, request) {
   const sale = { id: `R${randomUUID().replace(/-/g, '')}`, productId: product.id, name: product.name,
     qty: request.quantity, date: Date.now(), unitPrice: product.price, unitCost: product.cost,
     revenue: round(request.quantity * product.price), grossProfit: round(request.quantity * (product.price - product.cost)) };
+  if (user) { sale.buyerId = user.sub; sale.buyerName = user.name; }
   product.stock -= request.quantity; product.sold += request.quantity;
   next.activity.unshift(sale);
   const weekday = (new Date(sale.date).getDay() + 6) % 7;
   next.weekByDay[weekday] += sale.revenue; next.weekProfitByDay[weekday] += sale.grossProfit;
   next.weekUnits += request.quantity; next.lifetimeGrossProfit = round(next.lifetimeGrossProfit + sale.grossProfit);
-  const { unitCost, grossProfit, ...receipt } = sale;
+  const { unitCost, grossProfit, buyerId, ...receipt } = sale;
   return { state: next, receipt };
 }
 

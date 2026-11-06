@@ -195,3 +195,13 @@ body[data-mode="buyer"] main { max-width: 1200px; }
 .badge.out { background: #9d4840; border-color: #9d4840; color: #ffffff; }
 .badge.paused { background: #5f6771; border-color: #5f6771; color: #ffffff; }
 #sampleCatalogNotice { background: var(--surface); border-left: 4px solid #896728; color: var(--text); font-size: 12px; }
+
+.google-sign-in { min-height: 44px; margin: 24px 0 16px; }
+.google-sign-in.busy { pointer-events: none; opacity: .6; }
+.sign-in-links { display: flex; flex-wrap: wrap; gap: 16px; margin: 24px 0 16px; font-size: 12px; }
+.account-email { max-width: 220px; overflow: hidden; text-overflow: ellipsis; color: var(--muted); font-size: 11px; }
+.purchase-history { margin-top: 26px; }
+@media(max-width:760px) { .account-email { display: none; } }
+
+.demo-entry { width: 100%; margin-bottom: 12px; }
+.demo-notice { background: var(--surface); border-left: 4px solid var(--accent); font-size: 12px; }

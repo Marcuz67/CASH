@@ -17,11 +17,26 @@
       <h1 id="welcomeTitle">Choose a workspace</h1>
       <p>Products, stock, and sales for your store.</p>
       <a class="workspace-option" href="/buyer"><strong>Buyer</strong><span>Browse available products and record a purchase.</span><b aria-hidden="true">&rarr;</b></a>
-      <a class="workspace-option" href="/admin"><strong>Admin</strong><span>Manage inventory, review sales, and download reports.</span><b aria-hidden="true">&rarr;</b></a>
-      <p class="small-note">No account required. Both workspaces share the same store. Admin is publicly accessible.</p>
+      <a class="workspace-option" href="/admin"><strong>Seller / Admin</strong><span>Manage inventory, review sales, and download reports.</span><b aria-hidden="true">&rarr;</b></a>
+      <p class="small-note">Google sign-in is coming soon. Open either workspace to try its demo with sample data.</p>
     </div>
   </section>
 
+  <section id="signInScreen" class="welcome" aria-labelledby="signInTitle" hidden>
+    <div class="welcome-card">
+      <a class="wordmark" href="/">C.A.S.H.</a>
+      <p class="brand-description">Central Accountant and Storage Helper</p>
+      <h1 id="signInTitle">Sign in</h1>
+      <p id="signInDescription"></p>
+      <div id="googleSignInButton" class="google-sign-in"></div>
+      <p id="signInStatus" class="small-note" role="status">Google Play not available yet</p>
+      <button id="enterDemo" class="primary demo-entry" type="button">Try demo mode</button>
+      <p class="small-note">Demo changes are saved only in this browser. Your live store is not changed.</p>
+      <button id="retrySignIn" class="secondary" type="button" hidden>Reload sign-in</button>
+      <div class="sign-in-links"><a href="/buyer">Buyer sign-in</a><a href="/admin">Seller/Admin sign-in</a></div>
+      <p class="small-note">Google account sign-in will be available later. Demo mode does not require an account.</p>
+    </div>
+  </section>
   <div id="workspace" class="workspace" hidden>
     <aside id="sidebar" class="sidebar" aria-label="Administration">
       <a href="/" class="wordmark">C.A.S.H.</a>
@@ -41,13 +56,14 @@
       <header class="topbar">
         <a href="/" class="buyer-brand wordmark" id="buyerBrand" hidden>C.A.S.H.</a>
         <span id="shopName">Your store</span>
-        <div class="topbar-actions"><button id="themeToggle" class="quiet" type="button">Dark mode</button><a class="button secondary" href="/">Switch workspace</a></div>
+        <div class="topbar-actions"><span id="signedInAccount" class="account-email"></span><button id="signOut" class="quiet" type="button">Sign out</button><button id="themeToggle" class="quiet" type="button">Dark mode</button><a class="button secondary" href="/">Switch workspace</a></div>
       </header>
       <main id="main" tabindex="-1">
         <div class="page-heading"><div><p id="viewLabel" class="eyebrow">ADMIN WORKSPACE</p><h1 id="pageTitle">Overview</h1><p id="pageDescription" class="muted"></p></div><span id="connectionStatus" class="connection" role="status">Connecting...</span></div>
         <div id="loadError" class="notice error" role="alert" hidden><span id="loadErrorText"></span><button id="retryLoad" type="button">Try again</button></div>
         <div id="syncNotice" class="notice error" role="alert" hidden><span id="syncNoticeText"></span><button id="reloadStore" type="button">Reload store</button></div>
         <div id="loading" class="empty">Loading store records...</div>
+        <div id="demoModeNotice" class="notice demo-notice" hidden><span><strong>Demo mode</strong> &middot; Sample data in this browser only. The live store is unchanged.</span><button id="resetDemo" class="secondary" type="button">Reset demo</button></div>
         <div id="sampleCatalogNotice" class="notice" hidden><span>Starter products use sample prices and quantities. Admin can review and edit them in Inventory.</span><button id="markCatalogReviewed" class="secondary" type="button">Mark reviewed</button></div>
         <div id="views" hidden>
           <section id="overviewView" class="view" aria-label="Overview" hidden>
@@ -68,6 +84,7 @@
             <div id="purchaseReceipt" class="notice success" hidden><div><strong>Purchase recorded</strong><p id="purchaseReceiptText"></p><small>No online payment was collected.</small></div><button id="downloadPurchaseReceipt" class="secondary" type="button">Download receipt</button></div>
             <div class="toolbar"><label class="search-field"><span class="sr-only">Search products</span><input id="salesSearch" type="search" placeholder="Search products"></label><label><span class="sr-only">Sales category</span><select id="salesCategory"><option value="">All categories</option></select></label><span id="catalogCount" class="muted"></span></div>
             <div id="productCatalog" class="product-grid"></div>
+            <article id="purchaseHistoryPanel" class="panel purchase-history" hidden><div class="panel-heading"><div><h2>My purchases</h2><p>Receipts from your Google account, across devices</p></div></div><div id="myPurchasesTable" class="table-wrap"></div></article>
           </section>
 
           <section id="accountingView" class="view" aria-label="Accounting" hidden>
@@ -85,7 +102,7 @@
               <label>Store name<input id="storeName" name="store" maxlength="80" required></label><label>Owner name<input id="ownerName" name="owner" maxlength="80" required></label><label>Location<input id="storeLocation" name="location" maxlength="160"></label>
               <div class="photo-control"><img id="storePhotoPreview" class="photo-preview" alt="Store photo" hidden><div><label>Store photo<input id="storePhoto" type="file" accept="image/png,image/jpeg,image/webp"></label><button id="removeStorePhoto" class="quiet" type="button">Remove photo</button></div></div>
               <fieldset><legend>Daily gross profit goals</legend><div class="form-grid"><label>Below target (PHP)<input id="goalLow" type="number" min="0" step="0.01" required></label><label>Good performance from (PHP)<input id="goalHigh" type="number" min="0" step="0.01" required></label></div></fieldset>
-              <p class="small-note">Admin has no sign-in. Anyone with the admin link can change store records.</p><button class="primary" type="submit">Save settings</button>
+              <p class="small-note">Only approved Seller/Admin Google accounts can change store records.</p><button class="primary" type="submit">Save settings</button>
             </div></form>
           </section>
         </div>

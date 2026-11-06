@@ -1,7 +1,14 @@
 /* C.A.S.H. interface. The existing /api/shop API remains the source of truth. */
 'use strict';
 const $ = (id) => document.getElementById(id);
-const mode = location.pathname.replace(/\/$/, '').slice(1);
+// Re-enable Google only after the Google client ID and seller list are configured.
+const GOOGLE_SIGN_IN_AVAILABLE = false;
+const DEMO_KEY = 'cash-demo-store-v1';
+let demoMode = false;
+let demoMemory = null;
+let demoTabOnly = false;
+const route = location.pathname.replace(/\/$/, '').slice(1);
+const mode = route === 'seller' ? 'admin' : route;
 let state = null;
 let revision = 0;
 let view = mode === 'buyer' ? 'sales' : 'overview';
@@ -14,6 +21,10 @@ let photoPending = 0;
 let lastPurchase = null;
 let toastTimer;
 let pollTimer;
+let signedInUser = null;
+let myPurchases = [];
+let loginPending = false;
+let googleClientLoading;
 const money = (value) => new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(Number(value) || 0);
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
 const dateLabel = (value) => new Date(value).toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' });
@@ -46,7 +57,7 @@ function toast(message) {
   clearTimeout(toastTimer); $('toast').textContent = message; $('toast').hidden = false;
   toastTimer = setTimeout(() => { $('toast').hidden = true; }, 6000);
 }
-function syncStatus(message) { $('connectionStatus').textContent = message; }
+function syncStatus(message) { $('connectionStatus').textContent = demoMode ? (demoTabOnly ? 'Demo - this tab only' : 'Demo - browser data') : message; }
 function setBusy(value) {
   saving = value;
   document.querySelectorAll('form button[type="submit"], button[data-action], #addProduct').forEach((button) => { button.disabled = value || uncertainSave || (button.dataset.action === 'sell' && (!byId(button.dataset.id)?.saleEnabled || byId(button.dataset.id)?.stock < 1)); });
@@ -57,8 +68,12 @@ function setBusy(value) {
   syncStatus(value ? 'Saving...' : 'Connected to shared store');
 }
 async function readStore() {
+  if (demoMode) return readDemoStore();
   const response = await fetch(mode === 'buyer' ? '/api/catalog' : '/api/shop', { cache: 'no-store' });
-  if (!response.ok) throw new Error('Could not connect to the store database.');
+  if (!response.ok) {
+    const error = new Error([401,403].includes(response.status) ? 'Please sign in with the correct Google account.' : 'Could not connect to the store database.');
+    error.status = response.status; throw error;
+  }
   return response.json();
 }
 function accept(data) { state = normalize(data.state); revision = data.revision; }
@@ -69,7 +84,14 @@ async function commit(change) {
   setBusy(true);
   let response;
   try {
+    if (demoMode) {
+      const current = readDemoStore();
+      if (current.revision !== revision) { accept(current); render(); updateSale(); toast('Demo data changed in another tab. Review it and try again.'); return false; }
+      const saved = writeDemoStore({ state: next, revision: revision + 1 });
+      accept(saved); render(); return true;
+    }
     response = await fetch('/api/shop', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ state: next, revision }) });
+    if (response.status === 401 || response.status === 403) { await startWithAuth(); return false; }
     if (response.status === 409) {
       accept(await readStore()); render();
       updateSale();
@@ -99,14 +121,21 @@ async function refresh() {
   try {
     const data = await readStore();
     if (saving || revision !== before || document.querySelector('dialog[open]') || settingsDirty) return;
-    if (data.revision > revision) { accept(data); render(); }
+    if (data.revision > revision) { accept(data); render(); if (mode === 'buyer') await loadMyPurchases(); }
     syncStatus('Connected to shared store');
-  } catch { syncStatus('Connection interrupted'); }
+  } catch (error) {
+    if ([401,403].includes(error.status)) await startWithAuth();
+    else syncStatus('Connection interrupted');
+  }
 }
 async function start() {
-  if (!['admin', 'buyer'].includes(mode)) return;
+  if (!['admin', 'buyer'].includes(mode) || !signedInUser) return;
   document.body.dataset.mode = mode;
-  $('welcome').hidden = true; $('workspace').hidden = false;
+  $('welcome').hidden = true; $('signInScreen').hidden = true; $('workspace').hidden = false;
+  $('signedInAccount').textContent = signedInUser.email;
+  $('signOut').textContent = demoMode ? 'Exit demo' : 'Sign out';
+  $('demoModeNotice').hidden = !demoMode;
+  document.querySelector('.sidebar-footer span').textContent = demoMode ? 'Demo store in this browser' : 'Shared store database';
   $('sidebar').hidden = mode === 'buyer'; $('buyerBrand').hidden = mode !== 'buyer';
   $('viewLabel').textContent = mode === 'buyer' ? 'BUYER WORKSPACE' : 'ADMIN WORKSPACE';
   $('loading').hidden = false; $('loadError').hidden = true;
@@ -114,8 +143,10 @@ async function start() {
     let data = await readStore();
     accept(data); $('loading').hidden = true; $('views').hidden = false;
     render(); showView(view); syncStatus('Connected to shared store');
+    if (mode === 'buyer') await loadMyPurchases();
     clearInterval(pollTimer); pollTimer = setInterval(refresh, 5000);
   } catch (error) {
+    if ([401,403].includes(error.status)) { await startWithAuth(); return; }
     $('loading').hidden = true; $('loadError').hidden = false;
     $('loadErrorText').textContent = error.message; syncStatus('Not connected');
   }
@@ -336,8 +367,8 @@ async function saveSale(event) {
   } catch (error) { toast(error.message); return; }
   setBusy(true);
   try {
-    const response = await fetch('/api/sales', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ productId: product.id, quantity, revision }) });
+    const response = await purchaseRequest({ productId: product.id, quantity, revision });
+    if (response.status === 401 || response.status === 403) { await startWithAuth(); return; }
     if (response.status === 409) {
       accept(await readStore()); render(); updateSale();
       toast('The store changed. Review the latest stock and price, then try again.'); return;
@@ -351,7 +382,7 @@ async function saveSale(event) {
       $('purchaseReceipt').hidden = false;
       $('purchaseReceiptText').textContent = `${lastPurchase.qty} x ${lastPurchase.name} | ${money(lastPurchase.revenue)} | ${dateLabel(lastPurchase.date)}`;
     }
-    try { accept(await readStore()); render(); }
+    try { accept(await readStore()); render(); if (mode === 'buyer') await loadMyPurchases(); }
     catch { syncStatus('Purchase saved. Refresh to update stock.'); }
     toast(mode === 'buyer' ? 'Purchase recorded.' : 'Sale recorded.');
   } catch {
@@ -457,6 +488,7 @@ function downloadPdf(records, title, filename, admin = true) {
   const lines = ['C.A.S.H. - Central Accountant and Storage Helper', title,
     `Store: ${state.profile.store}`, `Location: ${state.profile.location || '-'}`,
     `Generated: ${dateLabel(Date.now())}`, ''];
+  if (demoMode) lines.splice(1, 0, 'DEMO DOCUMENT - SAMPLE DATA ONLY');
   sales.forEach((sale) => {
     lines.push(`Receipt: ${sale.id || sale.date}`, `Date: ${dateLabel(sale.date)}`, `Product: ${sale.name}`,
       `Quantity: ${sale.qty} x ${cash(sale.unitPrice)}`, `Total: ${cash(sale.revenue)}`);
@@ -481,7 +513,10 @@ document.addEventListener('click', (event) => {
   const action = event.target.closest('[data-action]');
   if (!action || saving || uncertainSave) return;
   const id = action.dataset.id;
-  if (action.dataset.action === 'sell') openSale(id);
+  if (action.dataset.action === 'receipt') {
+    const receipt = myPurchases.find(item => item.id === id);
+    if (receipt) downloadPdf([receipt], 'Purchase record', `cash-purchase-${receipt.id}.pdf`, false);
+  } else if (action.dataset.action === 'sell') openSale(id);
   else if (mode === 'admin') {
     if (action.dataset.action === 'toggleSale') {
       commit(next => { const product = next.products.find(item => item.id === id); if (product) product.saleEnabled = !product.saleEnabled; });
@@ -533,4 +568,160 @@ $('themeToggle').addEventListener('click', () => {
 const today = new Date();
 reportRange = { from: localDate(new Date(today.getFullYear(), today.getMonth(), 1)), to: localDate(today) };
 $('reportFrom').value = reportRange.from; $('reportTo').value = reportRange.to;
-start();
+startWithAuth();
+
+async function loadMyPurchases() {
+  if (mode !== 'buyer' || !signedInUser) return;
+  $('purchaseHistoryPanel').hidden = false;
+  try {
+    const response = demoMode ? { ok: true, json: async () => ({ purchases: readDemoStore().state.activity.filter(sale => sale.buyerId === 'demo-buyer') }) } : await fetch('/api/my-purchases', { cache: 'no-store' });
+    if (!response.ok) throw new Error('Could not load your purchase history.');
+    myPurchases = (await response.json()).purchases.sort((a,b) => b.date - a.date);
+    $('myPurchasesTable').innerHTML = table(['Date','Product','Quantity','Total','Receipt'], myPurchases.map(receipt =>
+      `<tr><td>${esc(dateLabel(receipt.date))}</td><td>${esc(receipt.name)}</td><td>${receipt.qty}</td><td>${money(receipt.revenue)}</td><td><button type="button" data-action="receipt" data-id="${esc(receipt.id)}">Download PDF</button></td></tr>`), 'No purchases have been recorded for your account yet.');
+  } catch (error) { $('myPurchasesTable').innerHTML = empty(error.message); }
+}
+function clearPrivateView() {
+  clearInterval(pollTimer);
+  document.querySelectorAll('dialog[open]').forEach(dialog => dialog.close());
+  $('workspace').hidden = true; $('views').hidden = true; $('purchaseReceipt').hidden = true;
+  $('welcome').hidden = true; $('signInScreen').hidden = false;
+  state = null; signedInUser = null; myPurchases = []; lastPurchase = null;
+  productPhoto = null; storePhoto = null; settingsDirty = false; uncertainSave = false;
+  $('syncNotice').hidden = true;
+  for (const id of ['productCatalog','inventoryTable','overviewSales','stockAlerts','reportTable','rankingsTable','myPurchasesTable','overviewStats','accountingStats','weekChart']) $(id).replaceChildren();
+  for (const id of ['purchaseReceiptText','weekSummary','inventorySummary','reportSummary','signedInAccount','saleProductName','saleAvailability','saleLimitNote','saleTotal']) $(id).textContent = '';
+  $('settingsForm').reset(); $('productForm').reset();
+  preview('storePhotoPreview', null); preview('productPhotoPreview', null);
+}
+async function loadGoogleClient() {
+  if (window.google?.accounts?.id) return;
+  if (!googleClientLoading) googleClientLoading = new Promise((resolve,reject) => {
+    const script = document.createElement('script'); script.src = 'https://accounts.google.com/gsi/client'; script.async = true;
+    const timeout = setTimeout(() => reject(new Error('Google sign-in could not load. Check your connection and reload.')), 15000);
+    script.onload = () => { clearTimeout(timeout); resolve(); };
+    script.onerror = () => { clearTimeout(timeout); reject(new Error('Google sign-in could not load. Check your connection and reload.')); };
+    document.head.append(script);
+  });
+  return googleClientLoading;
+}
+async function startWithAuth() {
+  if (!['admin','buyer'].includes(mode)) return;
+  clearPrivateView();
+  $('signInTitle').textContent = mode === 'admin' ? 'Seller / Admin sign-in' : 'Buyer sign-in';
+  $('signInDescription').textContent = mode === 'admin' ? 'Use an approved Google account to manage inventory and reports.' : 'Use your Google account to buy products and keep your receipts.';
+  $('signInStatus').textContent = 'Checking your sign-in...';
+  $('googleSignInButton').replaceChildren(); $('retrySignIn').hidden = true;
+  $('enterDemo').hidden = false;
+  $('googleSignInButton').hidden = !GOOGLE_SIGN_IN_AVAILABLE;
+  if (!GOOGLE_SIGN_IN_AVAILABLE) {
+    $('signInTitle').textContent = mode === 'admin' ? 'Seller / Admin demo' : 'Buyer demo';
+    $('signInDescription').textContent = mode === 'admin' ? 'Try managing sample products, stock, and reports.' : 'Try browsing sample products and recording a demo purchase.';
+    $('signInStatus').textContent = 'Google Play not available yet';
+    return;
+  }
+  try {
+    const response = await fetch('/api/auth/session', { cache: 'no-store' });
+    if (!response.ok) throw new Error('Sign-in is temporarily unavailable. Reload to try again.');
+    const session = await response.json();
+    if (session.user && (mode === 'buyer' || session.user.role === 'admin')) {
+      signedInUser = session.user; await start(); return;
+    }
+    if (!session.configured) throw new Error('Google sign-in is still being set up. Please contact the store owner.');
+    if (mode === 'admin' && !session.sellerConfigured) throw new Error('Seller/Admin access has not been set up yet. Please contact the store owner.');
+    $('signInStatus').textContent = session.user ? 'This account is a Buyer. Choose an approved Seller/Admin Google account, or open Buyer sign-in.' : 'Choose your Google account below.';
+    await loadGoogleClient();
+    window.google.accounts.id.initialize({ client_id: session.clientId, nonce: session.nonce, auto_select: false, callback: googleCredential });
+    window.google.accounts.id.renderButton($('googleSignInButton'), { theme: document.documentElement.dataset.theme === 'dark' ? 'filled_black' : 'outline', size: 'large', type: 'standard', text: 'signin_with', shape: 'rectangular', width: Math.min(300, Math.max(200, $('googleSignInButton').clientWidth || 300)) });
+  } catch (error) {
+    $('signInStatus').textContent = error.message; $('retrySignIn').hidden = false;
+  }
+}
+async function googleCredential(result) {
+  if (loginPending) return;
+  loginPending = true; $('googleSignInButton').classList.add('busy'); $('signInStatus').textContent = 'Verifying your Google account...';
+  try {
+    const response = await fetch('/api/auth/google', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ credential: result.credential, mode }) });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Google sign-in could not be completed.');
+    signedInUser = data.user; uncertainSave = false; await start();
+  } catch (error) { $('signInStatus').textContent = error.message; $('retrySignIn').hidden = false; }
+  finally { loginPending = false; $('googleSignInButton').classList.remove('busy'); }
+}
+$('retrySignIn').addEventListener('click', () => location.reload());
+$('signOut').addEventListener('click', async () => {
+  if (saving) return toast('Please wait for the current save to finish.');
+  if (settingsDirty && !confirm('Sign out without saving your store settings?')) return;
+  if (demoMode) { demoMode = false; await startWithAuth(); return; }
+  try {
+    const response = await fetch('/api/auth/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    if (!response.ok) throw new Error();
+    window.google?.accounts?.id.disableAutoSelect();
+    await startWithAuth();
+  } catch { toast('Could not sign out. Check your connection and try again.'); }
+});
+
+
+// Demo mode is a separate browser-only store. It never calls the live shop APIs.
+function demoStoreDefaults() {
+  const data = newStore();
+  data.profile = { owner: 'Demo owner', store: 'C.A.S.H. Demo Store', location: 'Sample store' };
+  data.products = [
+    ['rice','White rice - 1 kg','Pantry',50,58,45,10,5],
+    ['milk','Fresh milk - 1 L','Drinks',18,89,68,5,4],
+    ['eggs','Eggs - per piece','Produce',60,10,7,12,12],
+    ['bread','Bread loaf','Bakery',20,55,38,5,3],
+    ['water','Bottled water - 500 ml','Drinks',40,20,12,10,6],
+    ['noodles','Instant noodles','Pantry',36,18,12,8,6],
+    ['coffee','Coffee sachet','Pantry',48,12,8,10,10],
+    ['soap','Dishwashing liquid - 250 ml','Household',16,55,38,4,3],
+  ].map(([id,name,category,stock,price,cost,threshold,saleLimit]) => ({id:`demo_${id}`,name,category,stock,price,cost,threshold,saleLimit,saleEnabled:true,sold:0}));
+  return { version:1, revision:0, state:data };
+}
+function readDemoStore() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(DEMO_KEY) || 'null');
+    if (saved?.version === 1 && Number.isSafeInteger(saved.revision) && Array.isArray(saved.state?.products) && Array.isArray(saved.state?.activity)) {
+      demoMemory = saved; return structuredClone(saved);
+    }
+  } catch {}
+  if (!demoMemory) return writeDemoStore(demoStoreDefaults());
+  return structuredClone(demoMemory);
+}
+function writeDemoStore(data) {
+  const snapshot = { ...structuredClone(data), version:1 };
+  demoMemory = snapshot;
+  try { localStorage.setItem(DEMO_KEY, JSON.stringify(snapshot)); demoTabOnly = false; }
+  catch { demoTabOnly = true; }
+  return structuredClone(snapshot);
+}
+async function purchaseRequest(payload) {
+  if (!demoMode) return fetch('/api/sales', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+  const current = readDemoStore();
+  let error;
+  if (current.revision !== payload.revision) return {ok:false,status:409,json:async()=>({error:'Demo stock changed in another tab.'})};
+  const next = structuredClone(current.state); const product = next.products.find(item => item.id === payload.productId);
+  if (!product || !product.saleEnabled) error = 'This item is not offered for sale.';
+  else if (!Number.isSafeInteger(payload.quantity) || payload.quantity < 1 || payload.quantity > product.stock || payload.quantity > product.saleLimit) error = 'Choose a quantity within the stock and purchase limit.';
+  if (error) return {ok:false,status:400,json:async()=>({error})};
+  const quantity = payload.quantity;
+  const receipt = {id:`DEMO-${crypto.randomUUID().replace(/-/g,'')}`,productId:product.id,name:product.name,qty:quantity,date:Date.now(),unitPrice:product.price,unitCost:product.cost,revenue:round(quantity*product.price),grossProfit:round(quantity*(product.price-product.cost)),buyerId:signedInUser.sub,buyerName:signedInUser.name};
+  product.stock -= quantity; product.sold += quantity; next.activity.unshift(receipt);
+  const weekday = (new Date(receipt.date).getDay()+6)%7;
+  next.weekByDay[weekday] += receipt.revenue; next.weekProfitByDay[weekday] += receipt.grossProfit;
+  next.weekUnits += quantity; next.lifetimeGrossProfit = round(next.lifetimeGrossProfit+receipt.grossProfit);
+  const saved = writeDemoStore({state:next,revision:current.revision+1});
+  return {ok:true,status:200,json:async()=>({receipt,revision:saved.revision})};
+}
+$('enterDemo').addEventListener('click', async () => {
+  demoMode = true;
+  signedInUser = {sub:mode === 'admin' ? 'demo-admin' : 'demo-buyer',email:mode === 'admin' ? 'Seller demo' : 'Buyer demo',name:mode === 'admin' ? 'Demo seller' : 'Demo buyer',role:mode};
+  uncertainSave = false; await start();
+});
+$('resetDemo').addEventListener('click', () => {
+  if (!demoMode || saving || !confirm('Reset the demo products and transactions in this browser? The live store will not be changed.')) return;
+  const reset = demoStoreDefaults(); reset.revision = readDemoStore().revision + 1;
+  accept(writeDemoStore(reset)); settingsDirty = false; lastPurchase = null; $('purchaseReceipt').hidden = true;
+  render(); if (view === 'settings') fillSettings(); if (mode === 'buyer') loadMyPurchases();
+  toast('Demo reset to sample products.');
+});

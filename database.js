@@ -7,8 +7,27 @@ async function openStore() {
     const pool = new Pool({ connectionString: process.env.DATABASE_URL });
     await pool.query('CREATE TABLE IF NOT EXISTS cash_shop (id INTEGER PRIMARY KEY, state TEXT, revision INTEGER NOT NULL DEFAULT 0)');
     await pool.query('INSERT INTO cash_shop (id) VALUES (1) ON CONFLICT (id) DO NOTHING');
+    await pool.query('CREATE TABLE IF NOT EXISTS cash_google_accounts (google_sub TEXT PRIMARY KEY, email TEXT NOT NULL, display_name TEXT NOT NULL, created_at BIGINT NOT NULL, updated_at BIGINT NOT NULL)');
+    await pool.query('CREATE TABLE IF NOT EXISTS cash_sessions (token_hash TEXT PRIMARY KEY, identity TEXT NOT NULL, expires_at BIGINT NOT NULL)');
     return {
       kind: 'postgresql',
+      async saveAccount(user) {
+        const now = Date.now();
+        await pool.query('INSERT INTO cash_google_accounts (google_sub, email, display_name, created_at, updated_at) VALUES ($1,$2,$3,$4,$4) ON CONFLICT (google_sub) DO UPDATE SET email = EXCLUDED.email, display_name = EXCLUDED.display_name, updated_at = EXCLUDED.updated_at', [user.sub, user.email, user.name, now]);
+      },
+      async createSession(hash, identity, expires) {
+        await pool.query('DELETE FROM cash_sessions WHERE expires_at <= $1', [Date.now()]);
+        await pool.query('INSERT INTO cash_sessions (token_hash, identity, expires_at) VALUES ($1,$2,$3)', [hash, JSON.stringify(identity), expires]);
+      },
+      async getSession(hash) {
+        const result = await pool.query('SELECT identity, expires_at FROM cash_sessions WHERE token_hash = $1', [hash]);
+        return decodeSession(result.rows[0]);
+      },
+      async takeSession(hash) {
+        const result = await pool.query('DELETE FROM cash_sessions WHERE token_hash = $1 RETURNING identity, expires_at', [hash]);
+        return decodeSession(result.rows[0]);
+      },
+      async deleteSession(hash) { await pool.query('DELETE FROM cash_sessions WHERE token_hash = $1', [hash]); },
       async read() {
         const result = await pool.query('SELECT state, revision FROM cash_shop WHERE id = 1');
         return decode(result.rows[0]);
@@ -27,8 +46,20 @@ async function openStore() {
   if (filename !== ':memory:') mkdirSync(path.dirname(filename), { recursive: true });
   const db = new DatabaseSync(filename);
   db.exec('CREATE TABLE IF NOT EXISTS cash_shop (id INTEGER PRIMARY KEY, state TEXT, revision INTEGER NOT NULL DEFAULT 0); INSERT OR IGNORE INTO cash_shop (id) VALUES (1)');
+  db.exec('CREATE TABLE IF NOT EXISTS cash_google_accounts (google_sub TEXT PRIMARY KEY, email TEXT NOT NULL, display_name TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS cash_sessions (token_hash TEXT PRIMARY KEY, identity TEXT NOT NULL, expires_at INTEGER NOT NULL)');
   return {
     kind: 'sqlite',
+    async saveAccount(user) {
+      const now = Date.now();
+      db.prepare('INSERT INTO cash_google_accounts (google_sub,email,display_name,created_at,updated_at) VALUES (?,?,?,?,?) ON CONFLICT (google_sub) DO UPDATE SET email=excluded.email,display_name=excluded.display_name,updated_at=excluded.updated_at').run(user.sub,user.email,user.name,now,now);
+    },
+    async createSession(hash, identity, expires) {
+      db.prepare('DELETE FROM cash_sessions WHERE expires_at <= ?').run(Date.now());
+      db.prepare('INSERT INTO cash_sessions (token_hash,identity,expires_at) VALUES (?,?,?)').run(hash, JSON.stringify(identity), expires);
+    },
+    async getSession(hash) { return decodeSession(db.prepare('SELECT identity,expires_at FROM cash_sessions WHERE token_hash = ?').get(hash)); },
+    async takeSession(hash) { return decodeSession(db.prepare('DELETE FROM cash_sessions WHERE token_hash = ? RETURNING identity,expires_at').get(hash)); },
+    async deleteSession(hash) { db.prepare('DELETE FROM cash_sessions WHERE token_hash = ?').run(hash); },
     async read() { return decode(db.prepare('SELECT state, revision FROM cash_shop WHERE id = 1').get()); },
     async save(state, revision) {
       const result = db.prepare('UPDATE cash_shop SET state = ?, revision = revision + 1 WHERE id = 1 AND revision = ? RETURNING revision').get(JSON.stringify(state), revision);
@@ -39,6 +70,10 @@ async function openStore() {
 
 function decode(row) {
   return { state: row.state ? JSON.parse(row.state) : null, revision: row.revision };
+}
+
+function decodeSession(row) {
+  return row ? { identity: JSON.parse(row.identity), expires: Number(row.expires_at) } : null;
 }
 
 function validateState(state) {

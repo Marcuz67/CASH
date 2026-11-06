@@ -3,13 +3,28 @@ const { readFile } = require('node:fs/promises');
 const path = require('node:path');
 const { openStore, validateState } = require('./database');
 const { initializeCatalog, publicCatalog, recordPurchase } = require('./catalog');
+const { createAuth } = require('./auth');
 let store;
+let auth;
+
+async function jsonBody(request, limit = 8 * 1024 * 1024) {
+  if (!request.headers['content-type']?.startsWith('application/json')) throw Object.assign(new Error('Use application/json.'), { status: 415 });
+  let size = 0; const chunks = [];
+  for await (const chunk of request) {
+    size += chunk.length;
+    if (size > limit) throw Object.assign(new Error('The request is too large.'), { status: 413 });
+    chunks.push(chunk);
+  }
+  try { return JSON.parse(Buffer.concat(chunks).toString('utf8')); }
+  catch { throw Object.assign(new Error('Invalid JSON.'), { status: 400 }); }
+}
 
 const publicDirectory = path.join(__dirname, 'THECASH', 'outputs');
 const files = new Map([
   ['/', ['index.html', 'text/html; charset=utf-8']],
   ['/buyer', ['index.html', 'text/html; charset=utf-8']],
   ['/admin', ['index.html', 'text/html; charset=utf-8']],
+  ['/seller', ['index.html', 'text/html; charset=utf-8']],
   ['/index.html', ['index.html', 'text/html; charset=utf-8']],
   ['/app.js', ['app.js', 'text/javascript; charset=utf-8']],
   ['/styles.css', ['styles.css', 'text/css; charset=utf-8']],
@@ -17,6 +32,8 @@ const files = new Map([
 
 const server = http.createServer(async (request, response) => {
   response.setHeader('X-Content-Type-Options', 'nosniff');
+  response.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
+  response.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   if (!['GET', 'HEAD', 'PUT', 'POST'].includes(request.method)) {
     response.writeHead(405, { Allow: 'GET, HEAD' });
     response.end();
@@ -30,10 +47,33 @@ const server = http.createServer(async (request, response) => {
     response.end();
     return;
   }
-  if (['/api/shop', '/api/catalog', '/api/sales'].includes(pathname)) {
+  if (pathname.startsWith('/api/auth/')) {
     response.setHeader('Content-Type', 'application/json');
     response.setHeader('Cache-Control', 'no-store');
     try {
+      let result;
+      if (pathname === '/api/auth/session' && request.method === 'GET') result = await auth.session(request, response);
+      else if (pathname === '/api/auth/google' && request.method === 'POST') result = await auth.login(request, response, await jsonBody(request, 20000));
+      else if (pathname === '/api/auth/logout' && request.method === 'POST') result = await auth.logout(request, response);
+      else { response.writeHead(404); response.end(JSON.stringify({ error: 'Not found.' })); return; }
+      response.end(JSON.stringify(result));
+    } catch (error) {
+      response.writeHead(error.status || 503);
+      response.end(JSON.stringify({ error: error.status ? error.message : 'Sign-in is temporarily unavailable. Please try again.' }));
+    }
+    return;
+  }
+  if (['/api/shop', '/api/catalog', '/api/sales', '/api/my-purchases'].includes(pathname)) {
+    response.setHeader('Content-Type', 'application/json');
+    response.setHeader('Cache-Control', 'no-store');
+    try {
+      const user = await auth.requireUser(request, pathname === '/api/shop');
+      if (pathname === '/api/my-purchases') {
+        if (request.method !== 'GET') { response.writeHead(405, { Allow: 'GET' }); response.end(); return; }
+        const data = await store.read();
+        const purchases = data.state.activity.filter(sale => sale.buyerId === user.sub).map(({ unitCost, grossProfit, buyerId, ...receipt }) => receipt);
+        response.end(JSON.stringify({ purchases })); return;
+      }
       if (request.method === 'GET' && pathname !== '/api/sales') {
         const data = await store.read();
         response.end(JSON.stringify(pathname === '/api/catalog' ? publicCatalog(data) : data));
@@ -43,25 +83,11 @@ const server = http.createServer(async (request, response) => {
       if (pathname === '/api/catalog' || request.method !== (purchasing ? 'POST' : 'PUT')) {
         response.writeHead(405, { Allow: pathname === '/api/catalog' ? 'GET' : purchasing ? 'POST' : 'GET, PUT' }); response.end(); return;
       }
-      // Require JSON so a third-party HTML form cannot submit a store update.
-      if (!request.headers['content-type']?.startsWith('application/json')) {
-        response.writeHead(415); response.end(); return;
-      }
-      let size = 0;
-      const chunks = [];
-      for await (const chunk of request) {
-        size += chunk.length;
-        if (size > 8 * 1024 * 1024) {
-          response.writeHead(413); response.end(JSON.stringify({ error: 'Shop data is too large.' })); return;
-        }
-        chunks.push(chunk);
-      }
-      let payload;
-      try { payload = JSON.parse(Buffer.concat(chunks).toString('utf8')); }
-      catch { response.writeHead(400); response.end(JSON.stringify({ error: 'Invalid JSON.' })); return; }
+      auth.sameOrigin(request);
+      const payload = await jsonBody(request);
       if (purchasing) {
         const current = await store.read();
-        const purchase = recordPurchase(current, payload);
+        const purchase = recordPurchase(current, payload, user);
         if (purchase.error) {
           response.writeHead(purchase.status); response.end(JSON.stringify({ error: purchase.error })); return;
         }
@@ -84,8 +110,9 @@ const server = http.createServer(async (request, response) => {
       }
       response.end(JSON.stringify({ revision }));
     } catch (error) {
-      console.error('Database request failed:', error.code || error.name);
-      response.writeHead(503); response.end(JSON.stringify({ error: 'Database unavailable. Please try again.' }));
+      if (!error.status) console.error('Database request failed:', error.code || error.name);
+      response.writeHead(error.status || 503);
+      response.end(JSON.stringify({ error: error.status ? error.message : 'Database unavailable. Please try again.' }));
     }
     return;
   }
@@ -131,6 +158,7 @@ const server = http.createServer(async (request, response) => {
 const port = Number(process.env.PORT || 3000);
 openStore().then(async database => {
   store = database;
+  auth = createAuth({ store });
   await initializeCatalog(store);
   server.listen(port, '0.0.0.0', () => {
     console.log(`C.A.S.H. listening on port ${server.address().port}`);

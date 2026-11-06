@@ -4,11 +4,15 @@ const { spawn } = require('node:child_process');
 const { mkdtemp, rm } = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
+const { DatabaseSync } = require('node:sqlite');
+const { randomBytes, createHash } = require('node:crypto');
 
 async function boot(filename) {
+  let temporary;
+  if (filename === ':memory:') { temporary = await mkdtemp(path.join(os.tmpdir(), 'cash-auth-test-')); filename = path.join(temporary, 'test.sqlite'); }
   const child = spawn(process.execPath, ['server.js'], {
     cwd: __dirname,
-    env: { ...process.env, PORT: '0', DATABASE_PATH: filename, DATABASE_URL: '', RENDER: '', NODE_ENV: 'test' },
+    env: { ...process.env, PORT: '0', DATABASE_PATH: filename, DATABASE_URL: '', RENDER: '', NODE_ENV: 'test', GOOGLE_CLIENT_ID: 'cash-test.apps.googleusercontent.com', ADMIN_EMAILS: 'admin@gmail.com', APP_ORIGIN: '', RENDER_EXTERNAL_URL: '' },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   const base = await new Promise((resolve, reject) => {
@@ -20,7 +24,18 @@ async function boot(filename) {
       if (match) { clearTimeout(timeout); resolve(`http://127.0.0.1:${match[1]}`); }
     });
   });
-  return { base, stop: () => new Promise(resolve => { child.once('exit', resolve); child.kill(); }) };
+  const db = new DatabaseSync(filename);
+  const token = randomBytes(32).toString('hex');
+  const buyerToken = randomBytes(32).toString('hex');
+  const secondBuyerToken = randomBytes(32).toString('hex');
+  for (const [raw, sub, email, eligible] of [[token,'seller-1','admin@gmail.com',true],[buyerToken,'buyer-1','buyer@gmail.com',true],[secondBuyerToken,'buyer-2','second@gmail.com',true]]) {
+    db.prepare('INSERT INTO cash_sessions (token_hash,identity,expires_at) VALUES (?,?,?)').run(createHash('sha256').update(raw).digest('hex'), JSON.stringify({ purpose:'account', user:{sub,email,name:sub,sellerEligible:eligible} }), Date.now()+3600000);
+  }
+  db.close();
+  const request = (route, options = {}) => fetch(base + route, { ...options, headers: { Cookie: `cash_session=${token}`, Origin: base, ...options.headers } });
+  return { base, fetch: request, buyerCookie: `cash_session=${buyerToken}`, secondBuyerCookie: `cash_session=${secondBuyerToken}`,
+    stop: async () => { await new Promise(resolve => { child.once('exit', resolve); child.kill(); }); if (temporary) { assert.ok(path.resolve(temporary).startsWith(path.resolve(os.tmpdir()) + path.sep)); await rm(temporary, { recursive:true, force:true }); } } };
+
 }
 
 test('buyer and admin share durable state and concurrent writes cannot overwrite each other', async () => {
@@ -35,8 +50,8 @@ test('buyer and admin share durable state and concurrent writes cannot overwrite
     for (const route of ['/database.js', '/.env', '/data/cash.sqlite']) {
       assert.equal((await fetch(service.base + route)).status, 404);
     }
-    const read = () => fetch(service.base + '/api/shop').then(response => response.json());
-    const save = payload => fetch(service.base + '/api/shop', {
+    const read = () => service.fetch('/api/shop').then(response => response.json());
+    const save = payload => service.fetch('/api/shop', {
       method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
     });
     const initial = await read();
@@ -73,14 +88,14 @@ test('buyer and admin share durable state and concurrent writes cannot overwrite
 test('server enforces offered products, purchase limits, stock, and prices', async (t) => {
   const service = await boot(':memory:');
   t.after(() => service.stop());
-  const read = () => fetch(service.base + '/api/shop').then(response => response.json());
-  const put = (data) => fetch(service.base + '/api/shop', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
-  const buy = (data) => fetch(service.base + '/api/sales', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+  const read = () => service.fetch('/api/shop').then(response => response.json());
+  const put = (data) => service.fetch('/api/shop', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+  const buy = (data) => service.fetch('/api/sales', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
   let current = await read();
   const product = current.state.products[0];
   product.stock = 3; product.saleLimit = 2; product.saleEnabled = false;
   assert.equal((await put(current)).status, 200);
-  let catalog = await fetch(service.base + '/api/catalog').then(response => response.json());
+  let catalog = await service.fetch('/api/catalog').then(response => response.json());
   assert.ok(!catalog.state.products.some(item => item.id === product.id));
   assert.ok(catalog.state.products.every(item => item.cost === undefined && item.sold === undefined));
   assert.equal(catalog.state.activity, undefined);
@@ -108,4 +123,29 @@ test('server enforces offered products, purchase limits, stock, and prices', asy
   assert.equal((await put(invalid)).status, 400);
   current.state.products = []; assert.equal((await put(current)).status, 200);
   assert.equal((await read()).state.products.length, 0);
+});
+
+
+test('Google account sessions enforce buyer/seller separation and purchase ownership', async (t) => {
+  const service = await boot(':memory:'); t.after(() => service.stop());
+  assert.equal((await fetch(service.base + '/api/shop')).status, 401);
+  assert.equal((await fetch(service.base + '/api/catalog')).status, 401);
+  const buyerHeaders = { Cookie: service.buyerCookie, Origin: service.base, 'Content-Type': 'application/json' };
+  assert.equal((await fetch(service.base + '/api/shop', { headers: buyerHeaders })).status, 403);
+  assert.equal((await fetch(service.base + '/api/shop', { method: 'PUT', headers: buyerHeaders, body: '{}' })).status, 403);
+  const catalog = await fetch(service.base + '/api/catalog', { headers: buyerHeaders }).then(r => r.json());
+  const product = catalog.state.products[0];
+  const purchase = await fetch(service.base + '/api/sales', { method: 'POST', headers: buyerHeaders,
+    body: JSON.stringify({ productId:product.id, quantity:1, revision:catalog.revision, buyerId:'forged-owner' }) });
+  assert.equal(purchase.status, 200);
+  const own = await fetch(service.base + '/api/my-purchases', { headers:buyerHeaders }).then(r => r.json());
+  assert.equal(own.purchases.length,1); assert.equal(own.purchases[0].unitCost, undefined); assert.equal(own.purchases[0].grossProfit,undefined);
+  const other = await fetch(service.base + '/api/my-purchases', { headers:{Cookie:service.secondBuyerCookie} }).then(r=>r.json());
+  assert.equal(other.purchases.length,0);
+  const full = await service.fetch('/api/shop').then(r=>r.json()); assert.equal(full.state.activity[0].buyerId,'buyer-1');
+  const unsafe = await service.fetch('/api/shop', {method:'PUT',headers:{Origin:'https://other.example','Content-Type':'application/json'},body:JSON.stringify(full)});
+  assert.equal(unsafe.status,403);
+  const cookie = service.buyerCookie;
+  assert.equal((await fetch(service.base+'/api/auth/logout',{method:'POST',headers:buyerHeaders,body:'{}'})).status,200);
+  assert.equal((await fetch(service.base+'/api/catalog',{headers:{Cookie:cookie}})).status,401);
 });
