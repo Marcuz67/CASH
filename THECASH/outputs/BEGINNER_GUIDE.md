@@ -1,58 +1,36 @@
-# C.A.S.H. beginner guide
+# Working on C.A.S.H.
 
-This note is a friendly map for learning how the app is put together. You can edit the files in VS Code without adding a build step.
+Open the folder containing `package.json`, `server.js`, and `THECASH` in VS Code. Your extracted ZIP places this folder inside a second `CASH-main` folder.
 
-## Open the project
+## Run the app
 
-1. In VS Code, choose **File → Open Folder…**.
-2. Open the `THECASH` project folder. It contains `firebase.json`, `functions`, and `outputs`.
-3. Open `outputs/index.html` to change the page structure, `outputs/styles.css` to change its appearance, or `outputs/app.js` to change what the app does.
-4. Save with **Ctrl+S**, then reload the browser page to see the change.
+Use Node.js 24. In a terminal at the project root:
 
-## What each file does
+```sh
+npm install
+npm start
+```
 
-- `outputs/index.html` holds the page sections, buttons, forms, and pop-up dialogs. The `id` on an element is its name in the JavaScript.
-- `outputs/styles.css` controls colors, spacing, mobile layout, dark mode, and photo previews.
-- `outputs/app.js` connects buttons to actions and draws the dashboard, inventory, rankings, profits, and profile from the saved shop data.
-- `outputs/firebase-config.js` holds the public Firebase web settings. It is blank until you connect a Firebase project.
-- `outputs/firebase-setup.js` starts Firebase when the settings are filled in. With blank settings, the app uses browser-only accounts.
-- `functions/index.js` contains the server-side administrator actions for approving and deleting accounts.
-- `functions/scripts/bootstrap-admin.js` creates the first administrator after a Firebase project is connected.
-- `firestore.rules` and `storage.rules` decide which signed-in accounts may read or change cloud data.
-- `.editorconfig` and `.prettierrc.json` keep indentation and formatting consistent.
+Open http://localhost:3000/buyer or http://localhost:3000/admin. Use the Node server instead of opening HTML directly or using Live Server: both pages call the server's `/api/shop` endpoint.
 
-## How a button changes the app
+## Edit the interface
 
-Most app actions follow this simple pattern:
+- `THECASH/outputs/index.html` contains the workspace chooser, both layouts, and forms.
+- `THECASH/outputs/styles.css` contains solid-color styles, dark-mode variables, and responsive layouts. No framework or external font service is required.
+- `THECASH/outputs/app.js` loads data, draws screens, handles forms, and downloads PDF receipts. No account or Firebase code is required.
 
-1. A form or button in `index.html` has a unique `id`.
-2. `app.js` listens for that button or form near the bottom of the file.
-3. The event handler updates `state`, the JavaScript object that holds the current shop's products, profile, and sales.
-4. `persist()` saves the updated data. `render()` refreshes the visible page from that data.
+## Shared data
 
-For example, to change the text on the Add item button, search `index.html` for `addProductTop`. To change the work it performs, search `app.js` for `addProductTop`.
+- `server.js` serves files and the shared shop API.
+- `database.js` uses PostgreSQL on Render and local SQLite for development.
+- `shared-store.test.js` checks shared records, concurrent updates, and persistence.
 
-## Safe places to make a first change
+The frontend sends a new state with its current revision. The server rejects stale revisions to protect newer edits. The interface refreshes and asks you to review and retry. If a connection is lost before a save can be confirmed, reload before retrying, to avoid duplicate purchases.
 
-- Change a label or heading in `index.html`.
-- Change a color in the theme variables near the top of `styles.css`.
-- Change a category icon in the `iconFor` helper in `app.js`.
-- Change the example products in the `starter` list near the top of `app.js`.
+Existing database records keep the same structure. Sales retain recorded prices and costs after product edits or removal. Settings and photos use the same shared database. Older browser-only records are not automatically imported.
 
-When adding a new data field, update the form, its save handler, and `normalizeState()` so older saved shops receive a default value too.
+## Deployment and checks
 
-## Accounts and saved data
+Use a Render Node Web Service with build command `npm ci && npm run build`, start command `npm start`, and `DATABASE_URL` set privately to the PostgreSQL Internal Database URL. See the root README for details.
 
-With Firebase settings blank, usernames and shop records stay in this browser. Local account passwords are saved as salted hashes; the app does not save the plain password. A local username such as `student1` works in this mode.
-
-The local password minimum is four characters for a class demo. Four-character passwords are easy to guess, so use a longer password and a real Firebase project before storing real shop records. Firebase sign-in uses an email address and the app currently asks for at least eight characters. New Firebase accounts wait for administrator approval.
-
-Browser-only accounts are tied to the browser and page origin where they were created. They do not automatically move to another computer or into Firebase.
-
-## Format the files
-
-The project includes `.prettierrc.json` for consistent formatting. If you install the Prettier extension in VS Code, right-click a file and choose **Format Document**. Formatting changes indentation and line breaks; it does not add a new app dependency.
-
-## Ideas for a fuller store system
-
-The app currently tracks products, stock counts, recorded sales, gross profit, and receipt PDFs. Common next additions include suppliers, purchase orders, stock receiving and adjustment history, expiry dates, barcode scanning, returns, discounts, taxes, staff access, and backups. Add one feature at a time and decide how its records should be saved before building its screen.
+Run `npm run build` and `npm test` before sharing a change. Both workspaces have no accounts, Admin is intentionally public, and recording a purchase does not collect an online payment.
