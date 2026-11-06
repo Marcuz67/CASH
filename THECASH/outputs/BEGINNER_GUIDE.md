@@ -15,7 +15,7 @@ Open http://localhost:3000/buyer or http://localhost:3000/admin. Use the Node se
 
 ## Edit the interface
 
-- `THECASH/outputs/index.html` contains the workspace chooser, both layouts, and forms.
+- `THECASH/outputs/index.html` is the home page. Buyer login is in `buyer.html`; Admin login is in `admin.html`. Both entry documents share app.js and styles.css.
 - `THECASH/outputs/styles.css` contains solid-color styles, dark-mode variables, and responsive layouts. No framework or external font service is required.
 - `THECASH/outputs/app.js` loads data, draws screens, handles forms, and downloads PDF receipts. Google sign-in is handled by auth.js on the server; no Firebase code is required.
 
@@ -45,4 +45,12 @@ Before running, copy .env.example to .env and configure your Google client ID an
 
 ## Demo preview
 
-Google sign-in is currently paused. Click Try demo mode below the unavailable message on Buyer or Seller/Admin. The demo uses separate browser data and does not call live store APIs. Use Reset demo to restore sample items, or Exit demo to return to the access screen. Google setup is only required when the Google integration is enabled later.
+Google sign-in is currently paused. Buyer uses Continue as guest with the shared store inventory. The optional Admin demo uses separate browser data and does not call live store APIs. Use Reset demo to restore its sample items. Google setup is only required when the Google integration is enabled later.
+
+## Admin username/password
+
+The separate Admin page now has a real login form and first-time account setup. See ADMIN_ACCOUNT_SETUP.md for localhost and Render instructions. The local-admin.js module hashes/verifies passwords and checks owner-only setup; database.js stores the account and attempt limits. Google is not required for this Admin login.
+
+## Buyer Guest access
+
+Buyer now uses Continue as guest to access shared store inventory. Guest identity and receipts use a separate HttpOnly browser cookie; no account is created. Admin credentials are still required for inventory editing and reports. The optional Admin demo stays browser-only and does not affect the shared store.

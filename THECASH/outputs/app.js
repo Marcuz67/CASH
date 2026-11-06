@@ -5,9 +5,10 @@ const $ = (id) => document.getElementById(id);
 const GOOGLE_SIGN_IN_AVAILABLE = false;
 const DEMO_KEY = 'cash-demo-store-v1';
 let demoMode = false;
+let guestMode = false;
 let demoMemory = null;
 let demoTabOnly = false;
-const route = location.pathname.replace(/\/$/, '').slice(1);
+const route = location.pathname.replace(/\/$/, '').slice(1).replace(/\.html$/, '');
 const mode = route === 'seller' ? 'admin' : route;
 let state = null;
 let revision = 0;
@@ -25,6 +26,9 @@ let signedInUser = null;
 let myPurchases = [];
 let loginPending = false;
 let googleClientLoading;
+let adminSetupMode = false;
+let adminAccountState = null;
+let adminAuthPending = false;
 const money = (value) => new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(Number(value) || 0);
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
 const dateLabel = (value) => new Date(value).toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' });
@@ -69,7 +73,7 @@ function setBusy(value) {
 }
 async function readStore() {
   if (demoMode) return readDemoStore();
-  const response = await fetch(mode === 'buyer' ? '/api/catalog' : '/api/shop', { cache: 'no-store' });
+  const response = await fetch(mode === 'buyer' ? '/api/catalog' : '/api/shop', { cache: 'no-store', headers: guestMode ? {'X-Cash-Guest':'1'} : {} });
   if (!response.ok) {
     const error = new Error([401,403].includes(response.status) ? 'Please sign in with the correct Google account.' : 'Could not connect to the store database.');
     error.status = response.status; throw error;
@@ -132,12 +136,13 @@ async function start() {
   if (!['admin', 'buyer'].includes(mode) || !signedInUser) return;
   document.body.dataset.mode = mode;
   $('welcome').hidden = true; $('signInScreen').hidden = true; $('workspace').hidden = false;
-  $('signedInAccount').textContent = signedInUser.email;
-  $('signOut').textContent = demoMode ? 'Exit demo' : 'Sign out';
+  $('signedInAccount').textContent = signedInUser.email || signedInUser.username || signedInUser.name;
+  $('signOut').textContent = guestMode ? 'Back to guest access' : demoMode ? 'Exit demo' : 'Sign out';
+  if ($('guestModeNotice')) $('guestModeNotice').hidden = !guestMode;
   $('demoModeNotice').hidden = !demoMode;
   document.querySelector('.sidebar-footer span').textContent = demoMode ? 'Demo store in this browser' : 'Shared store database';
   $('sidebar').hidden = mode === 'buyer'; $('buyerBrand').hidden = mode !== 'buyer';
-  $('viewLabel').textContent = mode === 'buyer' ? 'BUYER WORKSPACE' : 'ADMIN WORKSPACE';
+  $('viewLabel').textContent = mode === 'buyer' ? (guestMode ? 'GUEST BUYER' : 'BUYER WORKSPACE') : 'ADMIN WORKSPACE';
   $('loading').hidden = false; $('loadError').hidden = true;
   try {
     let data = await readStore();
@@ -171,7 +176,7 @@ function financials(sale) {
   const unitPrice = Number(sale.unitPrice ?? product?.price ?? 0);
   const unitCost = Number(sale.unitCost ?? product?.cost ?? 0);
   return { ...sale, qty, unitPrice, unitCost, revenue: Number(sale.revenue ?? qty * unitPrice),
-    grossProfit: Number(sale.grossProfit ?? qty * (unitPrice - unitCost)), estimated: sale.unitPrice == null || sale.unitCost == null };
+    grossProfit: Number(sale.grossProfit ?? qty * (unitPrice - unitCost)), estimated: sale.unitPrice == null || (mode === 'admin' && sale.unitCost == null) };
 }
 function totals(sales) {
   return sales.reduce((sum, sale) => { sum.revenue += sale.revenue; sum.profit += sale.grossProfit; sum.units += sale.qty; return sum; }, { revenue: 0, profit: 0, units: 0 });
@@ -575,12 +580,13 @@ startWithAuth();
 async function loadMyPurchases() {
   if (mode !== 'buyer' || !signedInUser) return;
   $('purchaseHistoryPanel').hidden = false;
+  if ($('purchaseHistoryDescription')) $('purchaseHistoryDescription').textContent = guestMode ? 'Receipts linked to this browser. Clearing browser data removes access.' : demoMode ? 'Sample receipts saved in this browser' : 'Receipts from your Google account, across devices';
   try {
-    const response = demoMode ? { ok: true, json: async () => ({ purchases: readDemoStore().state.activity.filter(sale => sale.buyerId === 'demo-buyer') }) } : await fetch('/api/my-purchases', { cache: 'no-store' });
+    const response = demoMode ? { ok: true, json: async () => ({ purchases: readDemoStore().state.activity.filter(sale => sale.buyerId === 'demo-buyer') }) } : await fetch('/api/my-purchases', { cache: 'no-store', headers:guestMode ? {'X-Cash-Guest':'1'} : {} });
     if (!response.ok) throw new Error('Could not load your purchase history.');
     myPurchases = (await response.json()).purchases.sort((a,b) => b.date - a.date);
     $('myPurchasesTable').innerHTML = table(['Date','Product','Quantity','Total','Receipt'], myPurchases.map(receipt =>
-      `<tr><td>${esc(dateLabel(receipt.date))}</td><td>${esc(receipt.name)}</td><td>${receipt.qty}</td><td>${money(receipt.revenue)}</td><td><button type="button" data-action="receipt" data-id="${esc(receipt.id)}">Download PDF</button></td></tr>`), 'No purchases have been recorded for your account yet.');
+      `<tr><td>${esc(dateLabel(receipt.date))}</td><td>${esc(receipt.name)}</td><td>${receipt.qty}</td><td>${money(receipt.revenue)}</td><td><button type="button" data-action="receipt" data-id="${esc(receipt.id)}">Download PDF</button></td></tr>`), 'No purchases have been recorded yet.');
   } catch (error) { $('myPurchasesTable').innerHTML = empty(error.message); }
 }
 function clearPrivateView() {
@@ -594,6 +600,7 @@ function clearPrivateView() {
   for (const id of ['productCatalog','inventoryTable','overviewSales','stockAlerts','reportTable','rankingsTable','myPurchasesTable','overviewStats','accountingStats','weekChart']) $(id).replaceChildren();
   for (const id of ['purchaseReceiptText','weekSummary','inventorySummary','reportSummary','signedInAccount','saleProductName','saleAvailability','saleLimitNote','saleTotal']) $(id).textContent = '';
   $('settingsForm').reset(); $('productForm').reset();
+  $('adminPasswordForm')?.reset();
   preview('storePhotoPreview', null); preview('productPhotoPreview', null); preview('saleProductPhoto', null);
 }
 async function loadGoogleClient() {
@@ -607,18 +614,44 @@ async function loadGoogleClient() {
   });
   return googleClientLoading;
 }
-async function startWithAuth() {
+async function startWithAuth({skipGuestResume=false} = {}) {
   if (!['admin','buyer'].includes(mode)) return;
+  guestMode = false;
   clearPrivateView();
-  $('signInTitle').textContent = mode === 'admin' ? 'Seller / Admin sign-in' : 'Buyer sign-in';
+  $('signInTitle').textContent = mode === 'admin' ? 'Admin login' : 'Buyer login';
   $('signInDescription').textContent = mode === 'admin' ? 'Use an approved Google account to manage inventory and reports.' : 'Use your Google account to buy products and keep your receipts.';
   $('signInStatus').textContent = 'Checking your sign-in...';
   $('googleSignInButton').replaceChildren(); $('retrySignIn').hidden = true;
   $('enterDemo').hidden = false;
   $('googleSignInButton').hidden = !GOOGLE_SIGN_IN_AVAILABLE;
+  if (mode === 'buyer' && !GOOGLE_SIGN_IN_AVAILABLE) {
+    guestMode = false; demoMode = false;
+    $('signInTitle').textContent = 'Shop as a guest';
+    $('signInDescription').textContent = 'Browse products and record purchases without creating an account.';
+    $('enterDemo').textContent = 'Continue as guest';
+    $('signInStatus').textContent = 'Google Play not available yet';
+    if (!skipGuestResume) {
+      try {
+        const response = await fetch('/api/auth/guest/session',{cache:'no-store'});
+        if (response.ok) {
+          const result = await response.json();
+          if (result.user) { guestMode=true; signedInUser=result.user; await start(); return; }
+        }
+      } catch {}
+    }
+    return;
+  }
+  if (mode === 'admin') {
+    $('enterDemo').disabled = true;
+    const opened = await loadAdminAccess();
+    $('enterDemo').disabled = false;
+    if (opened) return;
+  }
   if (!GOOGLE_SIGN_IN_AVAILABLE) {
-    $('signInTitle').textContent = mode === 'admin' ? 'Seller / Admin demo' : 'Buyer demo';
-    $('signInDescription').textContent = mode === 'admin' ? 'Try managing sample products, stock, and reports.' : 'Try browsing sample products and recording a demo purchase.';
+    if (mode !== 'admin' || !adminSetupMode) {
+      $('signInTitle').textContent = mode === 'admin' ? 'Admin login' : 'Buyer login';
+      $('signInDescription').textContent = mode === 'admin' ? 'Sign in to manage your store.' : 'Browse products and try a sample purchase.';
+    }
     $('signInStatus').textContent = 'Google Play not available yet';
     return;
   }
@@ -640,7 +673,7 @@ async function startWithAuth() {
   }
 }
 async function googleCredential(result) {
-  if (loginPending) return;
+  if (loginPending || adminAuthPending) return;
   loginPending = true; $('googleSignInButton').classList.add('busy'); $('signInStatus').textContent = 'Verifying your Google account...';
   try {
     const response = await fetch('/api/auth/google', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ credential: result.credential, mode }) });
@@ -654,6 +687,7 @@ $('retrySignIn').addEventListener('click', () => location.reload());
 $('signOut').addEventListener('click', async () => {
   if (saving) return toast('Please wait for the current save to finish.');
   if (settingsDirty && !confirm('Sign out without saving your store settings?')) return;
+  if (guestMode) { guestMode = false; await startWithAuth({skipGuestResume:true}); return; }
   if (demoMode) { demoMode = false; await startWithAuth(); return; }
   try {
     const response = await fetch('/api/auth/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
@@ -707,7 +741,7 @@ function writeDemoStore(data) {
   return structuredClone(snapshot);
 }
 async function purchaseRequest(payload) {
-  if (!demoMode) return fetch('/api/sales', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+  if (!demoMode) return fetch('/api/sales', {method:'POST',headers:{'Content-Type':'application/json',...(guestMode ? {'X-Cash-Guest':'1'} : {})},body:JSON.stringify(payload)});
   const current = readDemoStore();
   let error;
   if (current.revision !== payload.revision) return {ok:false,status:409,json:async()=>({error:'Demo stock changed in another tab.'})};
@@ -725,7 +759,9 @@ async function purchaseRequest(payload) {
   return {ok:true,status:200,json:async()=>({receipt,revision:saved.revision})};
 }
 $('enterDemo').addEventListener('click', async () => {
-  demoMode = true;
+  if (adminAuthPending || loginPending) return;
+  if (mode === 'buyer') { await enterGuestMode(); return; }
+  guestMode = false; demoMode = true;
   signedInUser = {sub:mode === 'admin' ? 'demo-admin' : 'demo-buyer',email:mode === 'admin' ? 'Seller demo' : 'Buyer demo',name:mode === 'admin' ? 'Demo seller' : 'Demo buyer',role:mode};
   uncertainSave = false; await start();
 });
@@ -736,3 +772,78 @@ $('resetDemo').addEventListener('click', () => {
   render(); if (view === 'settings') fillSettings(); if (mode === 'buyer') loadMyPurchases();
   toast('Demo reset to sample products.');
 });
+
+
+function setAdminSetupMode(value) {
+  if (!$('adminPasswordForm')) return;
+  adminSetupMode = value;
+  $('adminNameField').hidden = !value; $('adminDisplayName').required = value;
+  $('adminConfirmField').hidden = !value; $('adminConfirmPassword').required = value;
+  $('adminSetupKeyField').hidden = !(value && adminAccountState?.tokenRequired);
+  $('adminSetupKey').required = value && Boolean(adminAccountState?.tokenRequired);
+  $('adminSetupHint').hidden = !value;
+  $('adminPassword').minLength = value ? 12 : 1;
+  $('adminPassword').autocomplete = value ? 'new-password' : 'current-password';
+  $('adminAuthSubmit').textContent = value ? 'Create Admin account' : 'Sign in';
+  $('signInTitle').textContent = value ? 'Create Admin account' : 'Admin login';
+  $('signInDescription').textContent = value ? 'Choose the credentials you will use to manage this store.' : 'Sign in to manage your store.';
+  $('toggleAdminSetup').textContent = value ? 'Back to Admin login' : 'Create first Admin account';
+}
+async function loadAdminAccess() {
+  if (!$('adminPasswordForm')) return false;
+  $('adminPasswordForm').hidden = false; $('adminAuthStatus').hidden = true;
+  try {
+    const response = await fetch('/api/auth/admin/status',{cache:'no-store'});
+    if (!response.ok) throw new Error('Could not check Admin access. Reload this page to try again.');
+    adminAccountState = await response.json();
+    if (adminAccountState.user) {
+      signedInUser = adminAccountState.user; demoMode = false; await start(); return true;
+    }
+    $('toggleAdminSetup').hidden = adminAccountState.exists || !adminAccountState.setupAvailable;
+    setAdminSetupMode(!adminAccountState.exists && adminAccountState.setupAvailable);
+    if (!adminAccountState.exists && !adminAccountState.setupAvailable) {
+      $('adminAuthStatus').textContent = 'First-time setup has not been enabled yet. Please contact the store owner.';
+      $('adminAuthStatus').hidden = false;
+    }
+  } catch (error) {
+    setAdminSetupMode(false);
+    $('toggleAdminSetup').hidden = true; $('adminAuthStatus').textContent = error.message; $('adminAuthStatus').hidden = false;
+  }
+  return false;
+}
+$('toggleAdminSetup')?.addEventListener('click',()=>setAdminSetupMode(!adminSetupMode));
+$('adminPasswordForm')?.addEventListener('submit',async(event)=>{
+  event.preventDefault(); if (adminAuthPending) return;
+  const payload = {username:$('adminUsername').value,password:$('adminPassword').value};
+  if (adminSetupMode) {
+    payload.name=$('adminDisplayName').value; payload.confirmPassword=$('adminConfirmPassword').value; payload.setupToken=$('adminSetupKey').value;
+  }
+  adminAuthPending=true; $('adminCredentials').disabled=true; $('toggleAdminSetup').disabled=true; $('enterDemo').disabled=true; $('adminAuthStatus').hidden=true;
+  try {
+    const response=await fetch(adminSetupMode?'/api/auth/admin/setup':'/api/auth/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    const result=await response.json();
+    if (!response.ok) {
+      if(response.status===409){adminAccountState={exists:true,setupAvailable:false};setAdminSetupMode(false);$('toggleAdminSetup').hidden=true;}
+      throw new Error(result.error || 'Could not sign in. Please try again.');
+    }
+    $('adminPasswordForm').reset(); signedInUser=result.user; demoMode=false; uncertainSave=false; await start();
+  } catch (error) {
+    $('adminPassword').value=''; $('adminConfirmPassword').value=''; $('adminSetupKey').value='';
+    $('adminAuthStatus').textContent=error.message; $('adminAuthStatus').hidden=false;
+  } finally {
+    adminAuthPending=false; $('adminCredentials').disabled=false; $('toggleAdminSetup').disabled=false; $('enterDemo').disabled=false;
+  }
+});
+
+
+async function enterGuestMode() {
+  if ($('enterDemo').disabled) return;
+  $('enterDemo').disabled=true; $('signInStatus').textContent='Opening guest access...';
+  try {
+    const response=await fetch('/api/auth/guest',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+    const result=await response.json();
+    if(!response.ok)throw new Error(result.error || 'Guest access could not connect. Please try again.');
+    guestMode=true; demoMode=false; signedInUser=result.user; uncertainSave=false; await start();
+  } catch(error) { $('signInStatus').textContent=error.message; }
+  finally { $('enterDemo').disabled=false; }
+}

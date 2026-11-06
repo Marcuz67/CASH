@@ -9,8 +9,21 @@ async function openStore() {
     await pool.query('INSERT INTO cash_shop (id) VALUES (1) ON CONFLICT (id) DO NOTHING');
     await pool.query('CREATE TABLE IF NOT EXISTS cash_google_accounts (google_sub TEXT PRIMARY KEY, email TEXT NOT NULL, display_name TEXT NOT NULL, created_at BIGINT NOT NULL, updated_at BIGINT NOT NULL)');
     await pool.query('CREATE TABLE IF NOT EXISTS cash_sessions (token_hash TEXT PRIMARY KEY, identity TEXT NOT NULL, expires_at BIGINT NOT NULL)');
+    await pool.query('CREATE TABLE IF NOT EXISTS cash_local_admin (id INTEGER PRIMARY KEY CHECK (id = 1), username TEXT UNIQUE NOT NULL, display_name TEXT NOT NULL, password_hash TEXT NOT NULL, version INTEGER NOT NULL DEFAULT 1, created_at BIGINT NOT NULL)');
+    await pool.query('CREATE TABLE IF NOT EXISTS cash_login_limits (attempt_key TEXT PRIMARY KEY, attempts INTEGER NOT NULL, expires_at BIGINT NOT NULL)');
     return {
       kind: 'postgresql',
+      async getLocalAdmin() { return (await pool.query('SELECT * FROM cash_local_admin WHERE id = 1')).rows[0] || null; },
+      async createLocalAdmin(account) {
+        const result = await pool.query('INSERT INTO cash_local_admin (id,username,display_name,password_hash,created_at) VALUES (1,$1,$2,$3,$4) ON CONFLICT (id) DO NOTHING RETURNING id', [account.username,account.name,account.passwordHash,Date.now()]);
+        return result.rows.length === 1;
+      },
+      async bumpLoginLimit(key, now, until) {
+        await pool.query('DELETE FROM cash_login_limits WHERE expires_at <= $1',[now]);
+        const result = await pool.query('INSERT INTO cash_login_limits (attempt_key,attempts,expires_at) VALUES ($1,1,$2) ON CONFLICT (attempt_key) DO UPDATE SET attempts = cash_login_limits.attempts + 1 RETURNING attempts,expires_at',[key,until]);
+        return { attempts:result.rows[0].attempts,expires:Number(result.rows[0].expires_at) };
+      },
+      async clearLoginLimit(key) { await pool.query('DELETE FROM cash_login_limits WHERE attempt_key = $1',[key]); },
       async saveAccount(user) {
         const now = Date.now();
         await pool.query('INSERT INTO cash_google_accounts (google_sub, email, display_name, created_at, updated_at) VALUES ($1,$2,$3,$4,$4) ON CONFLICT (google_sub) DO UPDATE SET email = EXCLUDED.email, display_name = EXCLUDED.display_name, updated_at = EXCLUDED.updated_at', [user.sub, user.email, user.name, now]);
@@ -47,8 +60,19 @@ async function openStore() {
   const db = new DatabaseSync(filename);
   db.exec('CREATE TABLE IF NOT EXISTS cash_shop (id INTEGER PRIMARY KEY, state TEXT, revision INTEGER NOT NULL DEFAULT 0); INSERT OR IGNORE INTO cash_shop (id) VALUES (1)');
   db.exec('CREATE TABLE IF NOT EXISTS cash_google_accounts (google_sub TEXT PRIMARY KEY, email TEXT NOT NULL, display_name TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS cash_sessions (token_hash TEXT PRIMARY KEY, identity TEXT NOT NULL, expires_at INTEGER NOT NULL)');
+  db.exec('CREATE TABLE IF NOT EXISTS cash_local_admin (id INTEGER PRIMARY KEY CHECK (id = 1), username TEXT UNIQUE NOT NULL, display_name TEXT NOT NULL, password_hash TEXT NOT NULL, version INTEGER NOT NULL DEFAULT 1, created_at INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS cash_login_limits (attempt_key TEXT PRIMARY KEY, attempts INTEGER NOT NULL, expires_at INTEGER NOT NULL)');
   return {
     kind: 'sqlite',
+    async getLocalAdmin() { return db.prepare('SELECT * FROM cash_local_admin WHERE id = 1').get() || null; },
+    async createLocalAdmin(account) {
+      return Boolean(db.prepare('INSERT INTO cash_local_admin (id,username,display_name,password_hash,created_at) VALUES (1,?,?,?,?) ON CONFLICT (id) DO NOTHING RETURNING id').get(account.username,account.name,account.passwordHash,Date.now()));
+    },
+    async bumpLoginLimit(key, now, until) {
+      db.prepare('DELETE FROM cash_login_limits WHERE expires_at <= ?').run(now);
+      const result = db.prepare('INSERT INTO cash_login_limits (attempt_key,attempts,expires_at) VALUES (?,1,?) ON CONFLICT (attempt_key) DO UPDATE SET attempts = cash_login_limits.attempts + 1 RETURNING attempts,expires_at').get(key,until);
+      return { attempts:result.attempts,expires:result.expires_at };
+    },
+    async clearLoginLimit(key) { db.prepare('DELETE FROM cash_login_limits WHERE attempt_key = ?').run(key); },
     async saveAccount(user) {
       const now = Date.now();
       db.prepare('INSERT INTO cash_google_accounts (google_sub,email,display_name,created_at,updated_at) VALUES (?,?,?,?,?) ON CONFLICT (google_sub) DO UPDATE SET email=excluded.email,display_name=excluded.display_name,updated_at=excluded.updated_at').run(user.sub,user.email,user.name,now,now);

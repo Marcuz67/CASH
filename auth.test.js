@@ -124,3 +124,27 @@ test('Google authentication library validates real JWT signatures, audience, iss
   const result = await auth.login(f.request(challenge.cookie),f.response(),{mode:'buyer',credential:jwt()});
   assert.equal(result.user.sub,'signed-google-sub'); assert.equal(result.user.role,'buyer');
 });
+
+test('guest access has a separate cookie, no Google account, and cannot become Admin',async()=>{
+  const f=fixture({configured:false}),res=f.response();
+  const guest=await f.auth.enterGuest(f.request(),res);
+  assert.equal(guest.user.role,'buyer');assert.equal(guest.user.provider,'guest');assert.equal(f.accounts.size,0);
+  const cookie=f.cookie(res,'__Host-cash_guest');assert.ok(cookie);
+  assert.equal((await f.auth.requireShopper(f.request(cookie))).sub,guest.user.sub);
+  await assert.rejects(f.auth.requireUser(f.request(cookie),true),{status:401});
+  const replayAsAdmin=cookie.replace('__Host-cash_guest=','__Host-cash_session=');
+  await assert.rejects(f.auth.requireUser(f.request(replayAsAdmin),true),{status:401});
+  assert.equal((await f.auth.enterGuest(f.request(cookie),f.response())).user.sub,guest.user.sub);
+  f.advance(30*24*60*60*1000+1);
+  await assert.rejects(f.auth.requireShopper(f.request(cookie)),{status:401});
+});
+
+test('guest access does not replace an existing Admin session in the same browser',async()=>{
+  const f=fixture();const challenge=await f.challenge();f.identity(challenge.nonce,'seller@gmail.com');const adminResponse=f.response();
+  await f.auth.login(f.request(challenge.cookie),adminResponse,{mode:'admin',credential:'aaa.bbb.ccc'});
+  const adminCookie=f.cookie(adminResponse,'__Host-cash_session');const guestResponse=f.response();
+  const guest=await f.auth.enterGuest(f.request(adminCookie),guestResponse);const guestCookie=f.cookie(guestResponse,'__Host-cash_guest');
+  const both=f.request(`${adminCookie}; ${guestCookie}`);
+  assert.equal((await f.auth.requireUser(both,true)).role,'admin');assert.equal((await f.auth.requireShopper(both)).role,'admin');
+  both.headers['x-cash-guest']='1';assert.equal((await f.auth.requireShopper(both)).sub,guest.user.sub);
+});

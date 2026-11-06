@@ -1,6 +1,6 @@
 # Enable Google accounts for C.A.S.H.
 
-Google sign-in is temporarily paused in the interface. Both access screens display "Google Play not available yet" and a Try demo mode button. Demo mode uses a separate browser-only store and does not call the real shop APIs. No Google configuration is needed for this preview. To activate real Google accounts later, complete the setup below and change `GOOGLE_SIGN_IN_AVAILABLE` to `true` near the top of `THECASH/outputs/app.js`.
+Google sign-in is temporarily paused. Buyer now uses Continue as guest with a separate browser cookie and the shared store inventory. Admin uses username/password login, with an optional isolated demo. No Google configuration is needed for these flows. To offer Google accounts later, complete this setup and enable GOOGLE_SIGN_IN_AVAILABLE in app.js; retain guest access as an alternative. Guest records are not automatically assigned to a later Google account.
 
 The code supports separate Buyer and Seller/Admin sign-in screens. Both use Google Identity Services. No Firebase or Gmail inbox permissions are needed. The integration uses a Web client ID; it does not need an OAuth client secret.
 

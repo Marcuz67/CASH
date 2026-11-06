@@ -210,3 +210,39 @@ body[data-mode="buyer"] main { max-width: 1200px; }
 .catalog-photo { height: 190px; object-fit: contain; padding: 10px; background: #f3f1ee; }
 .sale-product-photo { width: 100%; height: 170px; object-fit: contain; background: #f3f1ee; border: 1px solid var(--border); border-radius: 3px; padding: 8px; }
 @media(max-width:760px) { .catalog-photo { height: 160px; } }
+
+/* Buyer and Admin have separate HTML entry pages, each with a single login panel. */
+.access-page { min-height: 100svh; display: grid; grid-template-rows: auto 1fr auto; }
+.access-header { display: flex; align-items: center; gap: 22px; padding: 22px 32px; background: var(--surface); border-bottom: 1px solid var(--border); }
+.access-header span { font-size: 12px; color: var(--muted); }
+.access-content { display: flex; align-items: center; justify-content: center; padding: 40px 20px; }
+.access-card { width: min(100%, 420px); padding: 36px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); }
+.access-icon { display: grid; place-items: center; width: 48px; height: 48px; border: 1px solid var(--border); border-radius: 4px; color: var(--accent); background: var(--subtle); }
+.access-icon svg { width: 26px; height: 26px; }
+.access-label { margin: 22px 0 8px; font-size: 10px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: var(--muted); }
+.access-card h1 { margin-bottom: 12px; font-size: 30px; letter-spacing: -.6px; }
+.access-description { margin-bottom: 26px; color: var(--muted); font-size: 14px; line-height: 1.6; }
+.access-status { margin-bottom: 16px; padding: 12px 14px; border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 3px; color: var(--muted); background: var(--subtle); font-size: 12px; line-height: 1.5; }
+.access-card .demo-entry { min-height: 44px; margin-bottom: 16px; }
+.access-demo-note { margin-bottom: 24px; color: var(--muted); font-size: 12px; line-height: 1.6; text-align: center; }
+.access-back { display: block; padding-top: 18px; border-top: 1px solid var(--border); color: var(--muted); text-decoration: none; font-size: 12px; text-align: center; }
+.access-back:hover { color: var(--text); text-decoration: underline; }
+.access-footer { padding: 16px 20px 24px; color: var(--muted); font-size: 11px; text-align: center; }
+[data-entry="buyer"] .access-card { --accent: #386548; --accent-hover: #2a5038; }
+[data-theme="dark"] [data-entry="buyer"] .access-icon { color: #a3d3b4; }
+@media(max-width:560px) {
+  .access-header { padding: 18px 20px; gap: 12px; align-items: flex-start; flex-direction: column; }
+  .access-header .wordmark { font-size: 21px; }.access-header span { font-size: 11px; }
+  .access-content { padding: 28px 16px; }.access-card { padding: 28px 24px; }
+  .access-card h1 { font-size: 27px; }.access-footer { font-size: 10px; }
+}
+
+.admin-auth-form fieldset { display: grid; gap: 16px; padding: 0; border: 0; min-width: 0; }
+.admin-auth-form input { min-width: 0; }
+.admin-auth-form .primary { width: 100%; min-height: 44px; }
+.admin-auth-form [role="alert"] { margin: 12px 0 0; color: var(--negative); }
+.admin-setup-link { margin-top: 10px; padding-left: 0; font-size: 12px; }
+.access-divider { display: flex; align-items: center; gap: 12px; margin: 24px 0 16px; color: var(--muted); font-size: 11px; }
+.access-divider::before, .access-divider::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+
+.guest-notice { background: var(--surface); border-left: 4px solid #386548; font-size: 12px; }

@@ -10,3 +10,5 @@ services:
         sync: false
       - key: APP_ORIGIN
         value: https://cash-rqu6.onrender.com
+      - key: ADMIN_SETUP_TOKEN
+        sync: false

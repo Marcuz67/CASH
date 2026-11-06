@@ -10,6 +10,7 @@ function createAuth({ store, clientId = process.env.GOOGLE_CLIENT_ID || '',
   const emails = new Set(adminEmails.split(',').map(email => email.trim().toLowerCase()).filter(Boolean));
   const sessionCookie = secure ? '__Host-cash_session' : 'cash_session';
   const challengeCookie = secure ? '__Host-cash_login' : 'cash_login';
+  const guestCookie = secure ? '__Host-cash_guest' : 'cash_guest';
   const google = new OAuth2Client(clientId);
   const verify = verifyToken || (async credential => (await google.verifyIdToken({ idToken: credential, audience: clientId })).getPayload());
   const role = user => user.sellerEligible === true && emails.has(user.email.toLowerCase()) ? 'admin' : 'buyer';
@@ -44,13 +45,48 @@ function createAuth({ store, clientId = process.env.GOOGLE_CLIENT_ID || '',
     const session = await store.getSession(hash(token));
     if (!session || session.expires <= now() || session.identity.purpose !== 'account') return null;
     const user = session.identity.user;
+    if (user.provider === 'local-admin') {
+      const account = await store.getLocalAdmin();
+      if (!account || user.sub !== `local-admin:${account.id}` || user.version !== account.version) return null;
+      return { sub:user.sub,provider:'local-admin',username:account.username,name:account.display_name,version:account.version,role:'admin' };
+    }
     return { ...user, role: role(user) };
   }
   async function requireUser(request, seller = false) {
     const user = await currentUser(request);
-    if (!user) throw failure(401, 'Sign in with Google to continue.');
-    if (seller && user.role !== 'admin') throw failure(403, 'This Google account does not have Seller/Admin access.');
+    if (!user) throw failure(401, 'Sign in to continue.');
+    if (seller && user.role !== 'admin') throw failure(403, 'This account does not have Seller/Admin access.');
     return user;
+  }
+  async function currentGuest(request) {
+    const token = cookies(request)[guestCookie];
+    if (!token || !/^[a-f0-9]{64}$/.test(token)) return null;
+    const session = await store.getSession(hash(token));
+    if (!session || session.expires <= now() || session.identity.purpose !== 'guest') return null;
+    return {sub:session.identity.sub,name:'Guest',role:'buyer',provider:'guest'};
+  }
+  async function requireShopper(request) {
+    // Buyer guest access is separate from a signed-in Admin in the same browser.
+    const guest = await currentGuest(request);
+    if (request.headers['x-cash-guest'] === '1') {
+      if (!guest) throw failure(401,'Continue as guest to access the store.');
+      return guest;
+    }
+    const user = await currentUser(request);
+    if (user) return user;
+    if (guest) return guest;
+    throw failure(401,'Continue as guest or sign in to access the store.');
+  }
+  async function guestSession(request) { return {user:await currentGuest(request)}; }
+  async function enterGuest(request,response) {
+    sameOrigin(request);
+    const existing = await currentGuest(request);
+    if (existing) return {user:existing};
+    const token = randomBytes(32).toString('hex');
+    const sub = `guest:${randomBytes(16).toString('hex')}`;
+    await store.createSession(hash(token),{purpose:'guest',sub},now()+30*24*60*60*1000);
+    setCookie(response,guestCookie,token,30*24*60*60);
+    return {user:{sub,name:'Guest',role:'buyer',provider:'guest'}};
   }
   async function session(request, response) {
     const user = await currentUser(request);
@@ -62,7 +98,7 @@ function createAuth({ store, clientId = process.env.GOOGLE_CLIENT_ID || '',
       setCookie(response, challengeCookie, nonce, 600);
     }
     return { configured: Boolean(clientId), sellerConfigured: emails.size > 0, clientId: clientId || null, nonce: clientId ? nonce : null,
-      user: user ? { sub: user.sub, email: user.email, name: user.name, role: user.role } : null };
+      user: user ? publicUser(user) : null };
   }
   async function login(request, response, payload) {
     sameOrigin(request);
@@ -90,14 +126,21 @@ function createAuth({ store, clientId = process.env.GOOGLE_CLIENT_ID || '',
     const consumed = await store.takeSession(hash(nonce));
     if (!consumed || consumed.expires <= now() || consumed.identity.purpose !== 'google-login') throw failure(401, 'This sign-in request has already been used. Refresh and try again.');
     await store.saveAccount(user);
+    const result = await issueSession(request, response, user);
+    setCookie(response, challengeCookie, '', 0);
+    return result;
+  }
+  function publicUser(user) {
+    return { sub:user.sub,name:user.name,role:user.role || role(user),...(user.email ? {email:user.email} : {}),...(user.username ? {username:user.username} : {}) };
+  }
+  async function issueSession(request, response, user) {
     const token = randomBytes(32).toString('hex');
     // Rotate the session on every sign-in, and retain only its hash in the database.
     const oldToken = cookies(request)[sessionCookie];
     if (oldToken && /^[a-f0-9]{64}$/.test(oldToken)) await store.deleteSession(hash(oldToken));
     await store.createSession(hash(token), { purpose: 'account', user }, now() + 8 * 60 * 60 * 1000);
     setCookie(response, sessionCookie, token, 8 * 60 * 60);
-    setCookie(response, challengeCookie, '', 0);
-    return { user: { sub: user.sub, email: user.email, name: user.name, role: role(user) } };
+    return { user:publicUser(user) };
   }
   async function logout(request, response) {
     sameOrigin(request);
@@ -106,7 +149,7 @@ function createAuth({ store, clientId = process.env.GOOGLE_CLIENT_ID || '',
     setCookie(response, sessionCookie, '', 0); setCookie(response, challengeCookie, '', 0);
     return { signedOut: true };
   }
-  return { session, login, logout, requireUser, sameOrigin };
+  return { session, login, logout, requireUser, sameOrigin, currentUser, issueSession, guestSession, enterGuest, requireShopper };
 }
 
 module.exports = { createAuth };

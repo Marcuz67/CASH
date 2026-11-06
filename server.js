@@ -4,8 +4,10 @@ const path = require('node:path');
 const { openStore, validateState } = require('./database');
 const { initializeCatalog, publicCatalog, recordPurchase } = require('./catalog');
 const { createAuth } = require('./auth');
+const { createLocalAdmin } = require('./local-admin');
 let store;
 let auth;
+let localAdmin;
 
 async function jsonBody(request, limit = 8 * 1024 * 1024) {
   if (!request.headers['content-type']?.startsWith('application/json')) throw Object.assign(new Error('Use application/json.'), { status: 415 });
@@ -22,9 +24,11 @@ async function jsonBody(request, limit = 8 * 1024 * 1024) {
 const publicDirectory = path.join(__dirname, 'THECASH', 'outputs');
 const files = new Map([
   ['/', ['index.html', 'text/html; charset=utf-8']],
-  ['/buyer', ['index.html', 'text/html; charset=utf-8']],
-  ['/admin', ['index.html', 'text/html; charset=utf-8']],
-  ['/seller', ['index.html', 'text/html; charset=utf-8']],
+  ['/buyer', ['buyer.html', 'text/html; charset=utf-8']],
+  ['/buyer.html', ['buyer.html', 'text/html; charset=utf-8']],
+  ['/admin', ['admin.html', 'text/html; charset=utf-8']],
+  ['/admin.html', ['admin.html', 'text/html; charset=utf-8']],
+  ['/seller', ['admin.html', 'text/html; charset=utf-8']],
   ['/index.html', ['index.html', 'text/html; charset=utf-8']],
   ['/app.js', ['app.js', 'text/javascript; charset=utf-8']],
   ['/styles.css', ['styles.css', 'text/css; charset=utf-8']],
@@ -55,12 +59,18 @@ const server = http.createServer(async (request, response) => {
     response.setHeader('Cache-Control', 'no-store');
     try {
       let result;
-      if (pathname === '/api/auth/session' && request.method === 'GET') result = await auth.session(request, response);
+      if (pathname === '/api/auth/guest/session' && request.method === 'GET') result = await auth.guestSession(request);
+      else if (pathname === '/api/auth/guest' && request.method === 'POST') { await jsonBody(request,2000); result = await auth.enterGuest(request,response); }
+      else if (pathname === '/api/auth/admin/status' && request.method === 'GET') result = await localAdmin.status(request);
+      else if (pathname === '/api/auth/admin/setup' && request.method === 'POST') result = await localAdmin.setup(request, response, await jsonBody(request, 20000));
+      else if (pathname === '/api/auth/admin/login' && request.method === 'POST') result = await localAdmin.login(request, response, await jsonBody(request, 20000));
+      else if (pathname === '/api/auth/session' && request.method === 'GET') result = await auth.session(request, response);
       else if (pathname === '/api/auth/google' && request.method === 'POST') result = await auth.login(request, response, await jsonBody(request, 20000));
       else if (pathname === '/api/auth/logout' && request.method === 'POST') result = await auth.logout(request, response);
       else { response.writeHead(404); response.end(JSON.stringify({ error: 'Not found.' })); return; }
       response.end(JSON.stringify(result));
     } catch (error) {
+      if (error.retryAfter) response.setHeader('Retry-After',String(error.retryAfter));
       response.writeHead(error.status || 503);
       response.end(JSON.stringify({ error: error.status ? error.message : 'Sign-in is temporarily unavailable. Please try again.' }));
     }
@@ -70,7 +80,7 @@ const server = http.createServer(async (request, response) => {
     response.setHeader('Content-Type', 'application/json');
     response.setHeader('Cache-Control', 'no-store');
     try {
-      const user = await auth.requireUser(request, pathname === '/api/shop');
+      const user = pathname === '/api/shop' ? await auth.requireUser(request,true) : await auth.requireShopper(request);
       if (pathname === '/api/my-purchases') {
         if (request.method !== 'GET') { response.writeHead(405, { Allow: 'GET' }); response.end(); return; }
         const data = await store.read();
@@ -162,6 +172,7 @@ const port = Number(process.env.PORT || 3000);
 openStore().then(async database => {
   store = database;
   auth = createAuth({ store });
+  localAdmin = createLocalAdmin({ store,auth });
   await initializeCatalog(store);
   server.listen(port, '0.0.0.0', () => {
     console.log(`C.A.S.H. listening on port ${server.address().port}`);

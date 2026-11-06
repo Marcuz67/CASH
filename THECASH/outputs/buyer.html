@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#294b70">
+  <title>Buyer guest access | C.A.S.H.</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body data-entry="buyer">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <section id="welcome" hidden aria-hidden="true"></section>
+  <section id="signInScreen" class="access-page" aria-labelledby="signInTitle">
+    <header class="access-header"><a class="wordmark" href="/">C.A.S.H.</a><span>Central Accountant and Storage Helper</span></header>
+    <div class="access-content">
+      <div class="access-card">
+        <div class="access-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 8h12l1 13H5L6 8Z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg></div>
+        <p class="access-label">Buyer access</p>
+        <h1 id="signInTitle">Shop as a guest</h1>
+        <p id="signInDescription" class="access-description">Browse products and record purchases without creating an account.</p>
+        <div id="googleSignInButton" class="google-sign-in" hidden></div>
+        <p id="signInStatus" class="access-status" role="status">Google Play not available yet</p>
+        <button id="enterDemo" class="primary demo-entry" type="button">Continue as guest</button>
+        <button id="retrySignIn" class="secondary" type="button" hidden>Reload sign-in</button>
+        <p class="access-demo-note">No account or password needed.<br>Your receipts are linked to this browser.</p>
+        <a class="access-back" href="/">&larr; Back to home</a>
+      </div>
+    </div>
+    <footer class="access-footer">C.A.S.H. &middot; Central Accountant and Storage Helper</footer>
+  </section>
+  <div id="workspace" class="workspace" hidden>
+    <aside id="sidebar" class="sidebar" aria-label="Administration">
+      <a href="/" class="wordmark">C.A.S.H.</a>
+      <p class="brand-description">Central Accountant<br>and Storage Helper</p>
+      <p class="nav-heading">STORE MANAGEMENT</p>
+      <nav id="adminNav" aria-label="Admin navigation">
+        <button data-view="overview">Overview</button>
+        <button data-view="inventory">Inventory <span id="lowStockBadge" class="count" hidden></span></button>
+        <button data-view="sales">Sales</button>
+        <button data-view="accounting">Accounting</button>
+        <button data-view="rankings">Product rankings</button>
+        <button data-view="settings">Store settings</button>
+      </nav>
+      <div class="sidebar-footer"><span>Shared store database</span><a href="/buyer">Open buyer page &rarr;</a></div>
+    </aside>
+    <div class="main-column">
+      <header class="topbar">
+        <a href="/" class="buyer-brand wordmark" id="buyerBrand" hidden>C.A.S.H.</a>
+        <span id="shopName">Your store</span>
+        <div class="topbar-actions"><span id="signedInAccount" class="account-email"></span><button id="signOut" class="quiet" type="button">Sign out</button><button id="themeToggle" class="quiet" type="button">Dark mode</button><a class="button secondary" href="/">Switch workspace</a></div>
+      </header>
+      <main id="main" tabindex="-1">
+        <div class="page-heading"><div><p id="viewLabel" class="eyebrow">ADMIN WORKSPACE</p><h1 id="pageTitle">Overview</h1><p id="pageDescription" class="muted"></p></div><span id="connectionStatus" class="connection" role="status">Connecting...</span></div>
+        <div id="loadError" class="notice error" role="alert" hidden><span id="loadErrorText"></span><button id="retryLoad" type="button">Try again</button></div>
+        <div id="syncNotice" class="notice error" role="alert" hidden><span id="syncNoticeText"></span><button id="reloadStore" type="button">Reload store</button></div>
+        <div id="loading" class="empty">Loading store records...</div>
+        <div id="guestModeNotice" class="notice guest-notice" hidden><span><strong>Guest access</strong> &middot; No account needed. Receipts are linked to this browser.</span></div>
+        <div id="demoModeNotice" class="notice demo-notice" hidden><span><strong>Demo mode</strong> &middot; Sample data in this browser only. The live store is unchanged.</span><button id="resetDemo" class="secondary" type="button">Reset demo</button></div>
+        <div id="sampleCatalogNotice" class="notice" hidden><span>Starter products use sample prices and quantities. Admin can review and edit them in Inventory.</span><button id="markCatalogReviewed" class="secondary" type="button">Mark reviewed</button></div>
+        <div id="views" hidden>
+          <section id="overviewView" class="view" aria-label="Overview" hidden>
+            <div id="overviewStats" class="stats"></div>
+            <div class="dashboard-grid">
+              <article class="panel"><div class="panel-heading"><div><h2>Gross profit this week</h2><p>Monday to Sunday, from recorded sales</p></div></div><div id="weekChart" class="week-chart" role="list" aria-label="Daily gross profit"></div><p id="weekSummary" class="panel-footnote"></p></article>
+              <article class="panel"><div class="panel-heading"><div><h2>Stock alerts</h2><p>Products at or below their restock level</p></div><button data-view="inventory" class="quiet">View inventory</button></div><div id="stockAlerts" class="alert-list"></div></article>
+            </div>
+            <article class="panel"><div class="panel-heading"><div><h2>Recent sales</h2><p>Latest recorded transactions</p></div><button data-view="accounting" class="quiet">View all records</button></div><div id="overviewSales" class="table-wrap"></div></article>
+          </section>
+
+          <section id="inventoryView" class="view" aria-label="Inventory" hidden>
+            <div class="toolbar"><label class="search-field"><span class="sr-only">Search inventory</span><input id="inventorySearch" type="search" placeholder="Search products"></label><label><span class="sr-only">Product category</span><select id="inventoryCategory"><option value="">All categories</option></select></label><button id="addProduct" class="primary" type="button">Add product</button></div>
+            <div id="inventorySummary" class="section-note"></div><article class="panel"><div id="inventoryTable" class="table-wrap"></div></article>
+          </section>
+
+          <section id="salesView" class="view" aria-label="Products and sales" hidden>
+            <div id="purchaseReceipt" class="notice success" hidden><div><strong>Purchase recorded</strong><p id="purchaseReceiptText"></p><small>No online payment was collected.</small></div><button id="downloadPurchaseReceipt" class="secondary" type="button">Download receipt</button></div>
+            <div class="toolbar"><label class="search-field"><span class="sr-only">Search products</span><input id="salesSearch" type="search" placeholder="Search products"></label><label><span class="sr-only">Sales category</span><select id="salesCategory"><option value="">All categories</option></select></label><span id="catalogCount" class="muted"></span></div>
+            <div id="productCatalog" class="product-grid"></div>
+            <article id="purchaseHistoryPanel" class="panel purchase-history" hidden><div class="panel-heading"><div><h2>My purchases</h2><p id="purchaseHistoryDescription">Guest receipts from this browser</p></div></div><div id="myPurchasesTable" class="table-wrap"></div></article>
+          </section>
+
+          <section id="accountingView" class="view" aria-label="Accounting" hidden>
+            <form id="reportFilters" class="toolbar"><label>From<input id="reportFrom" type="date" required></label><label>To<input id="reportTo" type="date" required></label><button class="secondary" type="submit">Apply dates</button><button id="downloadReport" class="primary" type="button">Download report PDF</button><button id="latestReceipt" class="secondary" type="button">Latest receipt this month</button></form>
+            <div id="accountingStats" class="stats"></div><p class="section-note">Gross profit is revenue less product costs. It excludes operating expenses and taxes.</p>
+            <article class="panel"><div class="panel-heading"><div><h2>Sales records</h2><p id="reportSummary"></p></div></div><div id="reportTable" class="table-wrap"></div></article>
+          </section>
+
+          <section id="rankingsView" class="view" aria-label="Product rankings" hidden>
+            <div class="toolbar"><label>Order<select id="rankingOrder"><option value="best">Highest sales first</option><option value="low">Lowest sales first</option></select></label><span class="muted">Based on each product's total units sold.</span></div><article class="panel"><div id="rankingsTable" class="table-wrap"></div></article>
+          </section>
+
+          <section id="settingsView" class="view" aria-label="Store settings" hidden>
+            <form id="settingsForm" class="panel settings-form"><div class="panel-heading"><div><h2>Store information</h2><p>These details appear in both workspaces and on reports.</p></div></div><div class="form-body">
+              <label>Store name<input id="storeName" name="store" maxlength="80" required></label><label>Owner name<input id="ownerName" name="owner" maxlength="80" required></label><label>Location<input id="storeLocation" name="location" maxlength="160"></label>
+              <div class="photo-control"><img id="storePhotoPreview" class="photo-preview" alt="Store photo" hidden><div><label>Store photo<input id="storePhoto" type="file" accept="image/png,image/jpeg,image/webp"></label><button id="removeStorePhoto" class="quiet" type="button">Remove photo</button></div></div>
+              <fieldset><legend>Daily gross profit goals</legend><div class="form-grid"><label>Below target (PHP)<input id="goalLow" type="number" min="0" step="0.01" required></label><label>Good performance from (PHP)<input id="goalHigh" type="number" min="0" step="0.01" required></label></div></fieldset>
+              <p class="small-note">Only approved Seller/Admin Google accounts can change store records.</p><button class="primary" type="submit">Save settings</button>
+            </div></form>
+          </section>
+        </div>
+      </main>
+      <footer class="page-footer">C.A.S.H. &middot; Central Accountant and Storage Helper</footer>
+    </div>
+  </div>
+
+  <dialog id="productDialog" aria-labelledby="productDialogTitle"><form id="productForm"><div class="dialog-heading"><h2 id="productDialogTitle">Add product</h2><button type="button" class="close" data-close="productDialog" aria-label="Close product form">&times;</button></div><div class="form-body"><input id="productId" type="hidden"><label>Product name<input id="productName" maxlength="200" required></label><label>Category<input id="productCategory" list="categoryOptions" maxlength="80" required><datalist id="categoryOptions"></datalist></label><div class="form-grid"><label>Units in stock<input id="productStock" type="number" min="0" step="1" required></label><label>Restock level<input id="productThreshold" type="number" min="0" step="1" required></label><label>Buyer availability<select id="productSaleEnabled"><option value="true">For sale on buyer page</option><option value="false">Not for sale</option></select></label><label>Maximum units per purchase<input id="productSaleLimit" type="number" min="1" max="1000000" step="1" value="5" required></label><label>Selling price (PHP)<input id="productPrice" type="number" min="0" step="0.01" required></label><label>Unit cost (PHP)<input id="productCost" type="number" min="0" step="0.01" required></label></div><div class="photo-control"><img id="productPhotoPreview" class="photo-preview" alt="Product photo preview" hidden><div><label>Product photo<input id="productPhoto" type="file" accept="image/png,image/jpeg,image/webp"></label><button id="removeProductPhoto" class="quiet" type="button">Remove photo</button></div></div></div><div class="dialog-actions"><button class="secondary" type="button" data-close="productDialog">Cancel</button><button class="primary" type="submit">Save product</button></div></form></dialog>
+  <dialog id="saleDialog" aria-labelledby="saleDialogTitle"><form id="saleForm"><div class="dialog-heading"><h2 id="saleDialogTitle">Record purchase</h2><button class="close" type="button" data-close="saleDialog" aria-label="Close purchase form">&times;</button></div><div class="form-body"><input id="saleProductId" type="hidden"><img id="saleProductPhoto" class="sale-product-photo" alt="" hidden><h3 id="saleProductName"></h3><p id="saleAvailability" class="muted"></p><p id="saleLimitNote" class="small-note"></p><label>Quantity<input id="saleQuantity" type="number" min="1" step="1" value="1" required></label><div class="sale-total"><span>Total</span><strong id="saleTotal"></strong></div><p class="small-note">This records a purchase and deducts stock. No online payment is collected.</p></div><div class="dialog-actions"><button class="secondary" type="button" data-close="saleDialog">Cancel</button><button class="primary" type="submit" id="confirmSale">Confirm purchase</button></div></form></dialog>
+  <dialog id="receiveDialog" aria-labelledby="receiveTitle"><form id="receiveForm"><div class="dialog-heading"><h2 id="receiveTitle">Receive stock</h2><button class="close" type="button" data-close="receiveDialog" aria-label="Close stock receiving">&times;</button></div><div class="form-body"><input id="receiveProductId" type="hidden"><p id="receiveProductName"></p><label>Units received<input id="receiveQuantity" type="number" min="1" step="1" required></label><p class="small-note">Adds units to stock. This does not record a customer sale or a purchase expense.</p></div><div class="dialog-actions"><button class="secondary" type="button" data-close="receiveDialog">Cancel</button><button class="primary" type="submit">Save stock</button></div></form></dialog>
+  <dialog id="removeDialog" aria-labelledby="removeTitle"><form id="removeForm"><div class="dialog-heading"><h2 id="removeTitle">Remove product?</h2><button class="close" type="button" data-close="removeDialog" aria-label="Close removal dialog">&times;</button></div><div class="form-body"><input id="removeProductId" type="hidden"><p id="removeProductName"></p><p>Recorded sales and receipts will remain in Accounting.</p></div><div class="dialog-actions"><button class="secondary" type="button" data-close="removeDialog">Cancel</button><button class="danger" type="submit">Remove product</button></div></form></dialog>
+  <div id="toast" class="toast" role="status" hidden></div>
+</body>
+</html>
