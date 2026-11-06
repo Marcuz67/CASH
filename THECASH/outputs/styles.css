@@ -251,3 +251,9 @@ body[data-mode="buyer"] main { max-width: 1200px; }
 .buyer-auth-form .primary { width: 100%; min-height: 44px; }
 .buyer-auth-form [role="alert"] { margin: 12px 0 0; color: var(--negative); }
 .buyer-register-link { margin-top: 12px; padding-left: 0; text-align: left; font-size: 12px; }
+
+.password-field { position: relative; display: block; min-width: 0; }
+.password-field input { padding-right: 48px; }
+.password-toggle { position: absolute; top: 0; right: 0; width: 44px; height: 100%; min-height: 40px; padding: 10px; display: grid; place-items: center; border: 0; background: transparent; color: var(--muted); border-radius: 0 4px 4px 0; }
+.password-toggle:hover { background: var(--subtle); color: var(--text); }
+.password-toggle svg { width: 20px; height: 20px; pointer-events: none; }

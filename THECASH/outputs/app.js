@@ -1,6 +1,31 @@
 /* C.A.S.H. interface. The existing /api/shop API remains the source of truth. */
 'use strict';
 const $ = (id) => document.getElementById(id);
+function setPasswordVisibility(input, button, visible) {
+  input.type = visible ? 'text' : 'password';
+  const label = `${visible ? 'Hide' : 'Show'} ${input.name === 'setupToken' ? 'setup key' : input.name === 'confirmPassword' ? 'confirm password' : 'password'}`;
+  button.setAttribute('aria-label', label);
+  button.setAttribute('aria-pressed', String(visible));
+  button.title = label;
+  button.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>${visible ? '<path d="m3 3 18 18"/>' : ''}</svg>`;
+}
+function resetPasswordVisibility(form) {
+  form?.querySelectorAll('.password-toggle').forEach(button => setPasswordVisibility($(button.getAttribute('aria-controls')), button, false));
+}
+document.querySelectorAll('input[type="password"]').forEach(input => {
+  const wrapper = document.createElement('span');
+  wrapper.className = 'password-field';
+  input.before(wrapper);
+  wrapper.append(input);
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'password-toggle';
+  button.setAttribute('aria-controls', input.id);
+  setPasswordVisibility(input, button, false);
+  button.addEventListener('click', () => setPasswordVisibility(input, button, input.type === 'password'));
+  wrapper.append(button);
+});
+document.querySelectorAll('form').forEach(form => form.addEventListener('reset', () => resetPasswordVisibility(form)));
 // Re-enable Google only after the Google client ID and seller list are configured.
 const GOOGLE_SIGN_IN_AVAILABLE = false;
 const DEMO_KEY = 'cash-demo-store-v1';
@@ -777,6 +802,7 @@ $('resetDemo').addEventListener('click', () => {
 
 
 function setAdminSetupMode(value) {
+  resetPasswordVisibility($('adminPasswordForm'));
   if (!$('adminPasswordForm')) return;
   adminSetupMode = value;
   $('adminNameField').hidden = !value; $('adminDisplayName').required = value;
@@ -853,6 +879,7 @@ async function enterGuestMode() {
 
 
 function setBuyerRegistrationMode(value) {
+  resetPasswordVisibility($('buyerPasswordForm'));
   if (!$('buyerPasswordForm')) return;
   buyerRegistrationMode=value;
   $('buyerNameField').hidden=!value; $('buyerDisplayName').required=value;
