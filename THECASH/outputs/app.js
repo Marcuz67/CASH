@@ -14,6 +14,12 @@ let currentAccount = null;
 // The shop currently shown on screen. Form actions update this object before saving it.
 let state = null;
 let remoteUser = null;
+let workspaceMode = null;
+let sharedEnabled = false;
+let sharedRevision = 0;
+let sharedPending = 0;
+let sharedConflict = false;
+let sharedQueue = Promise.resolve();
 let remoteSignupBusy = false;
 let remoteAuthMessage = '';
 let remoteSavePromise = Promise.resolve(true);
@@ -200,39 +206,39 @@ function normalizeState(saved) {
   return data;
 }
 async function persistRemoteState() {
-  const client = window.CASH_FIREBASE;
-  if (!client || !remoteUser || !state) return true;
-  try {
-    await client.db
-      .collection('shops')
-      .doc(remoteUser.uid)
-      .set(
-        {
-          state: JSON.parse(JSON.stringify(state)),
-          updatedAt: client.firebase.firestore.FieldValue.serverTimestamp(),
-        },
-        { merge: true }
-      );
-    return true;
-  } catch (error) {
-    console.error('Cloud save failed', error);
-    toast('Your changes could not sync to Firebase. Check your connection.');
-    return false;
-  }
+  if (!sharedEnabled || !state) return false;
+  const snapshot = structuredClone(state);
+  sharedPending++;
+  const task = sharedQueue.then(async () => {
+    if (sharedConflict) return false;
+    try {
+      const response = await fetch('/api/shop', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ state: snapshot, revision: sharedRevision }),
+      });
+      if (!response.ok) {
+        sharedConflict = true;
+        const error = await response.json();
+        throw new Error(error.error || 'Shop could not be saved.');
+      }
+      sharedRevision = (await response.json()).revision;
+      return true;
+    } catch (error) {
+      sharedConflict = true;
+      el('sharedSyncNotice').hidden = false;
+      toast(error.message || 'The server could not be reached. Please reload the store before retrying.');
+      return false;
+    }
+  }).finally(() => { sharedPending--; });
+  sharedQueue = task.catch(() => false);
+  return task;
 }
-// Save the current shop in this browser and, when configured, sync it to Firebase.
+// The database is authoritative. Browser storage is only a best-effort cache.
 const persist = () => {
-  if (!activeShopDataKey || !state) return false;
-  let localSaved = false;
-  try {
-    localStorage.setItem(activeShopDataKey, JSON.stringify(state));
-    localSaved = true;
-  } catch {}
-  if (remoteUser) {
-    remoteSavePromise = persistRemoteState();
-    return true;
-  }
-  return localSaved;
+  if (!activeShopDataKey || !state || !sharedEnabled) return false;
+  try { localStorage.setItem(activeShopDataKey, JSON.stringify(state)); } catch {}
+  remoteSavePromise = persistRemoteState();
+  return true;
 };
 /* 3. Small helpers used by the screen renderers below. */
 const iconFor = (c) =>
@@ -326,7 +332,7 @@ function startAccountSession(account, importLegacy = false, remoteState) {
   }
   state = normalizeState(saved);
   if (!saved || importLegacy) state.profile.owner = account.displayName || state.profile.owner;
-  localStorage.setItem(ACTIVE_ACCOUNT_KEY, account.usernameKey);
+  try { localStorage.setItem(ACTIVE_ACCOUNT_KEY, account.usernameKey); } catch {}
   document.body.dataset.view = 'overview';
   document
     .querySelectorAll('button[data-view]')
@@ -338,8 +344,7 @@ function startAccountSession(account, importLegacy = false, remoteState) {
   el('authScreen').hidden = true;
   el('app').hidden = false;
   render();
-  if (remoteUser) remoteSavePromise = persistRemoteState();
-  openProfitCheck();
+  // Opening either workspace does not write or change the shared store.
 }
 function bytesToHex(bytes) {
   return Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('');
@@ -787,7 +792,7 @@ function renderSalesDesk() {
   el('salesProductRows').innerHTML = products.length ? products.map((product) => `
     <tr><td><div class="item-cell">${productVisual(product, 'mini-emoji')}${escapeHtml(product.name)}</div></td>
     <td>${Number(product.stock)}</td><td>${money(product.price)}</td>
-    <td><button class="row-action sell-btn" data-id="${escapeHtml(product.id)}" ${product.stock < 1 ? 'disabled' : ''}>${product.stock < 1 ? 'Out of stock' : 'Record sale'}</button></td></tr>`).join('')
+    <td><button class="row-action sell-btn" data-id="${escapeHtml(product.id)}" ${product.stock < 1 ? 'disabled' : ''}>${product.stock < 1 ? 'Out of stock' : workspaceMode === 'buyer' ? 'Buy item' : 'Record sale'}</button></td></tr>`).join('')
     : '<tr><td colspan="4"><div class="empty">No matching products. Add products in Inventory.</div></td></tr>';
   el('salesProductRows').querySelectorAll('.sell-btn').forEach((button) =>
     button.addEventListener('click', () => openSale(button.dataset.id)));
@@ -816,7 +821,7 @@ el('receiveForm').addEventListener('submit', async (event) => {
   el('saveReceive').disabled = true;
   product.stock = Number(product.stock) + quantity;
   const saved = persist();
-  const synced = remoteUser ? await remoteSavePromise : true;
+  const synced = sharedEnabled ? await remoteSavePromise : true;
   if (!saved || !synced) {
     state = previous;
     try { localStorage.setItem(activeShopDataKey, JSON.stringify(state)); } catch {}
@@ -1056,10 +1061,8 @@ function renderProfile() {
   el('profilePreviewName').textContent = profile.owner || 'Shop owner';
   el('profilePreviewShop').textContent = profile.store || 'Your shop';
   el('profilePreviewLocation').textContent = profile.location || 'Location not set';
-  el('profileDataBadge').textContent = remoteUser ? 'FIREBASE CLOUD' : 'LOCAL DATA';
-  el('profileSaveNote').textContent = remoteUser
-    ? 'Your profile syncs to your Firebase account.'
-    : 'Your profile is saved in this browser.';
+  el('profileDataBadge').textContent = 'SHARED DATABASE';
+  el('profileSaveNote').textContent = 'Shop details are shared between Buyer and Admin.';
   renderProfilePhotoPreview();
   el('activeAccountName').textContent = currentAccount?.username || 'shop owner';
   document.querySelector('.profile strong').textContent = profile.owner || 'Shop owner';
@@ -1143,7 +1146,7 @@ async function savePendingProfilePhoto() {
       toast('This browser is low on saved space. Try a smaller photo.');
       return;
     }
-    if (remoteUser && !(await remoteSavePromise)) {
+    if (sharedEnabled && !(await remoteSavePromise)) {
       state.profile = previousProfile;
       persist();
       return;
@@ -1193,12 +1196,14 @@ function openEdit(id) {
   el('saveProduct').textContent = 'Save changes';
   el('modalBackdrop').classList.add('show');
 }
-function removeProduct(id) {
+async function removeProduct(id) {
   const p = byId(id);
   if (!p) return;
   if (!confirm(`Remove ${p.name} from your products?`)) return;
+  const previous = structuredClone(state);
   state.products = state.products.filter((item) => item.id !== id);
   persist();
+  if (!(await remoteSavePromise)) { state = previous; render(); return; }
   render();
   toast(`${p.name} removed from your products.`);
 }
@@ -1504,7 +1509,7 @@ el('productForm').addEventListener('submit', async (event) => {
     if (existing) Object.assign(existing, product);
     else state.products.push(product);
     persist();
-    if (remoteUser && !(await remoteSavePromise)) return;
+    if (sharedEnabled && !(await remoteSavePromise)) return;
     render();
     closeProduct();
     toast(`${name} ${id ? 'updated' : 'added'}.`);
@@ -1546,7 +1551,7 @@ el('saleForm').addEventListener('submit', async (e) => {
     grossProfit: qty * unitProfit,
   });
   const saved = persist();
-  const synced = remoteUser ? await remoteSavePromise : true;
+  const synced = sharedEnabled ? await remoteSavePromise : true;
   el('saveSale').disabled = false;
   if (!saved || !synced) {
     state = previous;
@@ -1556,7 +1561,11 @@ el('saleForm').addEventListener('submit', async (e) => {
   }
   render();
   closeSale();
-  toast('Sale recorded!');
+  if (workspaceMode === 'buyer') {
+    el('buyerReceipt').hidden = false;
+    el('buyerReceipt').textContent = `Purchase recorded: ${qty} x ${p.name} - ${money(qty * unitPrice)}. No online payment was collected.`;
+  }
+  toast(workspaceMode === 'buyer' ? 'Purchase recorded.' : 'Sale recorded!');
 });
 el('addProductTop').addEventListener('click', openProduct);
 el('closeModal').addEventListener('click', closeProduct);
@@ -1598,6 +1607,7 @@ document.querySelectorAll('.ranking-tabs button').forEach((b) =>
 document.querySelectorAll('button[data-view]').forEach((b) =>
   b.addEventListener('click', () => {
     const view = b.dataset.view;
+    if (workspaceMode === 'buyer' && view !== 'sales') return;
     document
       .querySelectorAll('button[data-view]')
       .forEach((x) => x.classList.toggle('active', x.dataset.view === view));
@@ -1666,7 +1676,7 @@ el('closeGoals').addEventListener('click', closeGoals);
 el('cancelGoals').addEventListener('click', closeGoals);
 el('goalRedBelow').addEventListener('input', updateGoalSummary);
 el('goalGoodFrom').addEventListener('input', updateGoalSummary);
-el('goalsForm').addEventListener('submit', (e) => {
+el('goalsForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const redBelow = Number(el('goalRedBelow').value),
     goodFrom = Number(el('goalGoodFrom').value);
@@ -1674,8 +1684,10 @@ el('goalsForm').addEventListener('submit', (e) => {
     toast('Green goal must be higher than the red cutoff.');
     return;
   }
+  const previous = state.profitGoals;
   state.profitGoals = { redBelow, goodFrom };
   persist();
+  if (!(await remoteSavePromise)) { state.profitGoals = previous; return; }
   renderChart();
   closeGoals();
   toast('Profit goals saved.');
@@ -1712,7 +1724,7 @@ el('profileForm').addEventListener('submit', async (e) => {
       toast('This browser is low on saved space. Try a smaller photo.');
       return;
     }
-    if (remoteUser && !(await remoteSavePromise)) {
+    if (sharedEnabled && !(await remoteSavePromise)) {
       state.profile = previousProfile;
       persist();
       renderProfile();
@@ -1765,7 +1777,7 @@ el('removeProfilePhoto').addEventListener('click', () => {
 });
 el('saveProfilePhoto').addEventListener('click', savePendingProfilePhoto);
 el('refreshAdmin').addEventListener('click', renderAdminPanel);
-el('switchAccountButton').addEventListener('click', switchAccount);
+el('switchAccountButton').addEventListener('click', () => { window.location.href = '/'; });
 el('authForm').addEventListener('submit', submitAuthentication);
 el('authModeToggle').addEventListener('click', () => {
   authMode = authMode === 'login' ? 'create' : 'login';
@@ -1782,26 +1794,68 @@ el('todayLabel').textContent = new Intl.DateTimeFormat('en-PH', {
   .format(new Date())
   .toUpperCase();
 setReceiptDateDefaults();
-el('authSubmit').disabled = true;
-const launchApp = (client) => {
-  el('authSubmit').disabled = false;
-  if (client) {
-    window.CASH_FIREBASE = client;
-    renderAuthMode();
-    watchFirebaseAuth(client);
-    return;
+window.CASH_FIREBASE = null;
+async function refreshSharedShop() {
+  if (!sharedEnabled || sharedPending || !state || document.hidden) return;
+  if (document.querySelector('.modal-backdrop.show, dialog[open]') || document.body.dataset.view === 'profile') return;
+  try {
+    const response = await fetch('/api/shop', { cache: 'no-store' });
+    if (!response.ok) return;
+    const data = await response.json();
+    // Recheck after the request: a local save may have started while reading.
+    if (sharedPending || data.revision < sharedRevision) return;
+    if (data.revision !== sharedRevision || sharedConflict) {
+      state = normalizeState(data.state);
+      sharedRevision = data.revision;
+      sharedConflict = false;
+      el('sharedSyncNotice').hidden = true;
+      render();
+    }
+  } catch { /* Keep the current view; a failed save always displays an error. */ }
+}
+async function launchSharedWorkspace() {
+  const mode = window.location.pathname.replace(/\/$/, '').slice(1);
+  if (!['buyer', 'admin'].includes(mode)) return;
+  el('sharedStatus').textContent = 'Connecting to the store database...';
+  try {
+    let response = await fetch('/api/shop', { cache: 'no-store' });
+    if (!response.ok) throw new Error('The database could not be reached.');
+    let data = await response.json();
+    if (!data.state) {
+      const initial = normalizeState({ products: [], activity: [] });
+      response = await fetch('/api/shop', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ state: initial, revision: data.revision }),
+      });
+      if (!response.ok && response.status !== 409) throw new Error('The store could not be created.');
+      response = await fetch('/api/shop', { cache: 'no-store' });
+      if (!response.ok) throw new Error('The store could not be loaded.');
+      data = await response.json();
+    }
+    sharedRevision = data.revision;
+    sharedEnabled = true;
+    workspaceMode = mode;
+    document.body.dataset.workspace = mode;
+    startAccountSession({ username: mode === 'buyer' ? 'Buyer' : 'Admin', usernameKey: 'shared-store', displayName: 'Shop owner' }, false, data.state);
+    el('workspaceChooser').hidden = true;
+    el('adminNav').hidden = true;
+    el('adminView').hidden = true;
+    if (mode === 'buyer') {
+      document.querySelector('.nav button[data-view="sales"]').click();
+      el('pageTitle').textContent = 'Browse & buy';
+      el('pageSub').textContent = 'Choose a product and quantity. Purchases update the store inventory.';
+      el('crumbText').textContent = 'Buyer';
+      el('salesDeskLabel').textContent = 'Buyer';
+      el('salesDeskTitle').textContent = 'Available products';
+      el('salesDeskIntro').textContent = 'Choose an item to record a purchase. No online payment is collected.';
+      el('saveSale').textContent = 'Confirm purchase';
+      el('saleTitle').textContent = 'Confirm your purchase';
+      document.querySelector('label[for="saleQty"]').textContent = 'Quantity';
+    }
+    setInterval(refreshSharedShop, 5000);
+    document.addEventListener('visibilitychange', refreshSharedShop);
+  } catch (error) {
+    el('sharedStatus').textContent = `${error.message} Refresh this page to retry.`;
   }
-  window.CASH_FIREBASE = null;
-  const rememberedUsername = localStorage.getItem(ACTIVE_ACCOUNT_KEY);
-  const rememberedAccount = accounts.find((account) => account.usernameKey === rememberedUsername);
-  if (rememberedAccount) startAccountSession(rememberedAccount);
-  else {
-    if (rememberedUsername) localStorage.removeItem(ACTIVE_ACCOUNT_KEY);
-    showLoginScreen();
-  }
-};
-(window.CASH_FIREBASE_READY || Promise.resolve(null)).then(launchApp).catch((error) => {
-  console.error('Firebase could not start', error);
-  el('authSubmit').disabled = false;
-  showLoginScreen('Firebase could not connect. Check your internet connection and Firebase setup.');
-});
+}
+launchSharedWorkspace();

@@ -3866,3 +3866,20 @@ body.dark .workflow-note, body.dark .receive-dialog { background: #202a38; color
   .sales-view .search { width: 100%; }
   .receive-dialog { padding: 20px; }
 }
+
+/* Two public links share one server-side store. These are views, not permission roles. */
+.legacy-auth { display: none !important; }
+.workspace-links { display: grid; gap: 16px; margin: 24px 0; }
+.workspace-links a { display: flex; flex-direction: column; gap: 8px; padding: 20px; text-decoration: none; border-radius: 12px; font-size: 18px; }
+.workspace-links a span { font-size: 14px; font-weight: 400; line-height: 1.5; }
+.workspace-switch { text-decoration: none; white-space: nowrap; }
+body[data-workspace='buyer'] .sidebar,
+body[data-workspace='buyer'] #addProductTop,
+body[data-workspace='buyer'] #profitCheckButton,
+body[data-workspace='buyer'] .sales-recent { display: none !important; }
+body[data-workspace='buyer'] .app { grid-template-columns: minmax(0, 1fr); }
+body[data-workspace='buyer'] main { width: 100%; max-width: 1200px; margin: 0 auto; }
+#buyerReceipt[hidden] { display: none; }
+@media(max-width:640px) { .top-right { flex-wrap: wrap; } }
+
+#sharedSyncNotice[hidden] { display: none; }

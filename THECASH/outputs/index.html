@@ -8,8 +8,17 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body data-view="overview">
-    <!-- Local sign-in and account creation -->
-    <section class="auth-screen" id="authScreen" aria-labelledby="authTitle">
+    <section class="auth-screen" id="workspaceChooser" aria-labelledby="workspaceTitle">
+      <div class="auth-card">
+        <div class="auth-brand"><span class="brand-mark">C</span><span><strong>C.A.S.H.</strong><small>Central Accountant and Storage Helper</small></span></div>
+        <h1 id="workspaceTitle">Choose your workspace</h1>
+        <p>One store, two views. No account or password needed.</p>
+        <div class="workspace-links"><a class="primary" href="/buyer">Buyer <span>Browse products and record a purchase</span></a><a class="secondary" href="/admin">Admin <span>Manage stock and view accounting reports</span></a></div>
+        <p class="panel-caption" id="sharedStatus" role="status">Both links use the same store database. Admin is open to anyone with the link.</p>
+      </div>
+    </section>
+    <!-- Older local account markup retained for compatibility; not used in shared mode. -->
+    <section class="auth-screen legacy-auth" id="authScreen" aria-labelledby="authTitle" hidden>
       <div class="auth-card">
         <div class="auth-brand">
           <span class="brand-mark">C</span
@@ -132,7 +141,7 @@
       <main>
         <div class="topbar">
           <div class="crumb">C.A.S.H. <span> / </span> <b id="crumbText">Dashboard</b></div>
-          <div class="top-right">
+          <div class="top-right"><a href="/" class="secondary workspace-switch">Switch workspace</a>
             <button class="primary add-button" id="addProductTop">
               <span class="plus">＋</span>Add item</button
             ><button
@@ -147,6 +156,7 @@
             </button>
           </div>
         </div>
+        <div id="sharedSyncNotice" class="workflow-note" role="alert" hidden>Changes could not be saved. <a href="">Reload store before trying again</a></div>
         <div class="page-heading">
           <div>
             <div class="eyebrow" id="todayLabel">SATURDAY, OCTOBER 17</div>
@@ -226,9 +236,10 @@
           </article>
         </section>
         <section class="sales-view" id="salesView" aria-label="Record sales">
-          <div class="workflow-note"><strong>Sales desk</strong><span>Choose an item to record a customer purchase. Stock updates when you save the sale.</span></div>
+          <div class="workflow-note"><strong id="salesDeskLabel">Sales desk</strong><span id="salesDeskIntro">Choose an item to record a customer purchase. Stock updates when you save the sale.</span></div>
+          <p id="buyerReceipt" class="workflow-note" role="status" hidden></p>
           <article class="panel">
-            <div class="panel-head"><div><div class="panel-title">Record a sale</div><div class="panel-caption">Available products and selling prices</div></div>
+            <div class="panel-head"><div><div class="panel-title" id="salesDeskTitle">Record a sale</div><div class="panel-caption">Available products and selling prices</div></div>
               <label class="search"><input id="salesSearch" type="search" placeholder="Search products..." aria-label="Search products to sell"></label>
             </div>
             <div class="table-wrap"><table><thead><tr><th>PRODUCT</th><th>AVAILABLE</th><th>UNIT PRICE</th><th>ACTION</th></tr></thead><tbody id="salesProductRows"></tbody></table></div>
@@ -374,7 +385,7 @@
               <div class="profile-header-actions">
                 <span class="period" id="profileDataBadge">LOCAL DATA</span
                 ><button class="secondary" id="switchAccountButton" type="button">
-                  Switch account
+                  Choose workspace
                 </button>
               </div>
             </div>
@@ -434,7 +445,7 @@
                   ><button class="primary" type="submit">Save profile</button>
                 </div>
                 <div class="profile-account-row">
-                  <span>Signed in as <strong id="activeAccountName">shop owner</strong></span>
+                  <span>Workspace: <strong id="activeAccountName">shop owner</strong></span>
                 </div>
               </form>
             </div>
@@ -679,8 +690,6 @@
       </form>
     </dialog>
     <div class="toast" id="toast" role="status"></div>
-    <script src="firebase-config.js"></script>
-    <script src="firebase-setup.js"></script>
     <script src="app.js"></script>
   </body>
 </html>

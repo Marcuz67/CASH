@@ -1,111 +1,56 @@
 # C.A.S.H.
 
-**Central Accountant and Storage Helper** is a small-store inventory and sales tracker.
+Central Accountant and Storage Helper uses plain HTML, CSS and browser JavaScript, with a Node.js server and a shared database.
 
-## Project map
+## Links
 
-- `outputs/index.html` contains the sign-in screen, app layout, dialogs, and photo controls.
-- `outputs/styles.css` contains the light and dark themes and responsive layout.
-- `outputs/app.js` contains inventory, sales, profit, local sign-in, and Firebase account behavior.
-- `outputs/firebase-config.js` holds the public web app settings copied from Firebase Console.
-- `outputs/firebase-setup.js` loads Firebase only after those settings are filled in.
-- `firestore.rules` and `storage.rules` protect shop data and uploaded photos.
-- `functions/index.js` contains the administrator approval and account deletion functions.
-- `functions/scripts/bootstrap-admin.js` creates the first administrator using server credentials.
-- `firebase.json` connects the app and backend files for deployment.
-- `outputs/BEGINNER_GUIDE.md` explains the file map and common places to make a first change.
-- `.editorconfig` and `.prettierrc.json` keep code formatting consistent.
+- `/`: workspace chooser.
+- `/buyer`: browse products and record a purchase. No account required.
+- `/admin`: manage inventory, receive stock, view accounting reports and PDF receipts. No account required.
 
-Keep the web files together in `outputs`. Open the parent project folder in VS Code when working with Firebase so the rules and `functions` folder stay beside `firebase.json`.
+Both links use the same database. Admin is intentionally public: these pages are different views, not access controls. Purchases record a transaction and deduct stock; no online payment is collected. Buyer does not display administrative controls or other buyers' recent transactions.
 
-## Photos
+## Run locally
 
-Profile pictures and product pictures use the same square image preparation: choose an image, check the preview, then save it. The profile has its own **Save photo** button; product photos are saved with the product. The app center-crops each photo to a small square and compresses it before saving. With Firebase configured, profile and product photos go to the signed-in owner's Storage folder.
+Use Node.js 24. From the repository root:
 
-## Firebase setup
+```sh
+npm install
+npm start
+```
 
-Firebase is optional in the current files. With the fields in `outputs/firebase-config.js` blank, the app keeps using browser-only accounts and records. The Firebase backend code is prepared, but no live project is linked yet. Firebase mode needs a project created under your Google account and its web app settings added to the config file.
-
-**Billing:** the requested Cloud Functions admin approval and Cloud Storage photo uploads require Firebase's pay-as-you-go Blaze plan. No-cost usage may apply, but charges can depend on storage location and usage. The current app remains in local mode until Firebase is configured; do not upgrade a project until you are ready to attach billing. See Firebase's [Cloud Functions pricing requirements](https://firebase.google.com/docs/functions/quotas-pricing) and [Storage billing requirements](https://firebase.google.com/docs/storage/faqs-storage-changes-announced-sept-2024).
-
-1. In the [Firebase Console](https://console.firebase.google.com/), create a project and register a **Web app**. Copy its web settings into `outputs/firebase-config.js`.
-2. Enable **Email/Password** in Authentication, create a Cloud Firestore database, and enable Cloud Storage.
-3. Install the Firebase CLI, sign in, and select your project from this project folder:
-
-   ```powershell
-   npm install -g firebase-tools
-   firebase login
-   firebase use --add
-   ```
-
-4. Install the backend packages:
-
-   ```powershell
-   cd functions
-   npm install
-   cd ..
-   ```
-
-5. Create the first administrator from a trusted computer. Make a service account credential available through `GOOGLE_APPLICATION_CREDENTIALS`, then set `FIREBASE_PROJECT_ID`, `CASH_ADMIN_EMAIL`, `CASH_ADMIN_PASSWORD`, and optionally `CASH_ADMIN_NAME` in your PowerShell session. From the `functions` folder, run `npm run bootstrap-admin`. The password and service account key are never stored in the web files.
-6. Deploy the rules, functions, and website:
-
-   ```powershell
-   firebase deploy --only firestore:rules,storage,functions,hosting
-   ```
-
-Cloud Functions deployment requires the Firebase project to use the [Blaze plan](https://firebase.google.com/docs/functions/quotas-pricing), and Storage also requires Blaze. Firebase's [web setup guide](https://firebase.google.com/docs/web/setup) explains how to register the web app and copy its config.
-
-New Firebase sign-ups remain pending until an administrator approves them. The Admin tab appears only for the administrator created by the bootstrap script; it can approve requests and delete non-admin profiles. Authorization is enforced by server functions and Firebase rules, not by hiding buttons in the page. The Firebase web config is public; never place service account credentials or administrator passwords in it.
-
-The Firebase version should be opened through `http://localhost` or Firebase Hosting rather than `file://`. Browser-only mode continues to work with the Firebase config left blank.
-
-## Sign-in and saved data
-
-With Firebase disabled, account records and inventory stay in the current browser. With Firebase enabled, approved accounts sync shop state across devices. Existing browser-only data is not automatically copied to Firebase.
-
-Local passwords now need at least four characters so a class demo can use a short password. Firebase account creation and sign-in still require at least eight characters and use an email address.
-
-## Sales and receipts
-
-New sale records keep the date, item, quantity, unit price, unit cost, revenue, and gross profit. Older records may estimate receipt amounts from the item's current price and cost.
-
-- **Latest sale this month** downloads a PDF receipt for the newest sale recorded this month.
-- The date fields and **Download range PDF** export all recorded sales in the selected date range.
-
-## Footnote: future store features to consider
-
-- Supplier records and purchase orders.
-- Stock receiving and adjustment history.
-- Batch numbers and expiry alerts.
-- Barcode scanning, variants, discounts, taxes, returns, and refunds.
-- Scheduled backups and staff permissions.
-
-## Open in VS Code
-
-1. Choose **File → Open Folder…**.
-2. Select the project folder that contains `firebase.json` and `outputs`.
-3. Edit the web page in `outputs/index.html`, its appearance in `outputs/styles.css`, and its behavior in `outputs/app.js`.
-
-## Separate workspaces
-
-- **Dashboard:** store summary and daily profit chart.
-- **Sales:** search products, record customer purchases, and view recent transactions. Sales deduct stock; no product editing controls appear here.
-- **Inventory:** add/edit products, prices, costs, and stock alerts. **Receive stock** adds delivery quantities without recording a sale. This is a quantity adjustment, not a purchase expense ledger.
-- **Accounting:** profit summaries, dated sales history, and PDF receipts. This screen has no sales or inventory editing controls.
-- **Rankings:** best and low selling products.
-
-These are workflow screens within one authenticated app, not separate permission roles.
+Open http://localhost:3000/buyer or http://localhost:3000/admin. Without `DATABASE_URL`, local development uses SQLite at `data/cash.sqlite`. This folder is ignored by Git. The shared shop starts empty; add products in Admin. Older browser-only accounts and data are retained in browser storage but are not automatically imported.
 
 ## Deploy to Render
 
-Deploy as a Render **Web Service**, using the root `render.yaml` or these manual settings:
+Use a Node **Web Service** with these settings:
 
-- Runtime: Node.
-- Root Directory: leave blank.
-- Build Command: `npm ci && npm run build`.
-- Start Command: `npm start`.
-- Health Check Path: `/health`.
+| Setting | Value |
+| --- | --- |
+| Root Directory | Leave blank |
+| Build Command | `npm ci && npm run build` |
+| Start Command | `npm start` |
+| Health Check Path | `/health` |
+| Environment variable | `DATABASE_URL`: your PostgreSQL connection URL |
 
-Push the updated repository before deploying. The plain JavaScript server serves the HTML, CSS and JavaScript on Render's `PORT` at `0.0.0.0`. Run `npm install` and `npm start` from the repository root to preview at http://localhost:3000.
+Create or choose a Render PostgreSQL database in the same region/account as the Web Service. Copy its **Internal Database URL** into the Web Service's **Environment** as `DATABASE_URL`. Keep this URL in Render, not in browser JavaScript or Git. The root `render.yaml` also defines the service and prompts for `DATABASE_URL` when using a Blueprint. No database is provisioned automatically.
 
-The server hosts the website; accounts and shop records still use browser storage unless optional Firebase is configured. A Web Service alone does not add a shared database. Firebase backend services need their separate setup.
+The server creates its `cash_shop` table on startup. Production/Render requires PostgreSQL; missing configuration or database failure prevents startup instead of falling back to temporary files. Firebase is not loaded or used by these account-free pages. Earlier Firebase files remain in the repository as legacy reference.
+
+Render connection reference: https://render.com/docs/postgresql-creating-connecting
+
+## Shared records
+
+Both pages read and update `/api/shop`. Saves use a revision check so simultaneous pages cannot silently overwrite each other. When a change conflicts or fails, the page shows a reload prompt. Pages check for updates every five seconds while visible, except while an edit dialog or the profile editor is open. The database is authoritative; browser storage is a best-effort cache.
+
+The state is kept as a single versioned database record. For larger stores, move products and transactions into separate tables with transaction-specific APIs. Current profit-by-product reports still estimate historical values using current product prices and costs. Gross profit excludes operating expenses and taxes.
+
+## Files and checks
+
+- `server.js`: HTTP routes and the shared shop API.
+- `database.js`: PostgreSQL storage and local SQLite fallback.
+- `THECASH/outputs/index.html`: both workspace layouts and chooser.
+- `THECASH/outputs/app.js`: screen behavior and database synchronization.
+- `THECASH/outputs/styles.css`: layouts, responsive styles and themes.
+
+Run `npm run build` and `npm test`. Backend integration tests check both links, shared reads/writes, invalid updates, concurrent-write conflicts and persistence after restart using a disposable SQLite database. Separate DOM checks verified Admin product creation, an independent Buyer purchase, stock deduction, and reporting refresh. Live PostgreSQL and visual browser checks have not been performed in this session.
