@@ -722,6 +722,7 @@ function render() {
     cats.map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
   if (cats.includes(prev)) el('categoryFilter').value = prev;
   renderRows();
+  renderSalesDesk();
   renderRanks();
   renderChart();
   renderProfits();
@@ -753,7 +754,7 @@ function renderRows() {
               <td><span class="stock-pill ${statusClass}">${status}</span></td>
               <td>
                 <div class="row-actions">
-                  <button class="row-action sell-btn" data-id="${product.id}">＋ Sale</button>
+                  <button class="row-action receive-btn" data-id="${escapeHtml(product.id)}">Receive stock</button>
                   <button class="row-action edit-btn" data-id="${product.id}">Edit</button>
                   <button
                     class="row-action remove delete-btn"
@@ -770,8 +771,8 @@ function renderRows() {
         .join('')
     : `<tr><td colspan="7"><div class="empty">No products found. Add your first product to get started.</div></td></tr>`;
   document
-    .querySelectorAll('.sell-btn')
-    .forEach((b) => b.addEventListener('click', () => openSale(b.dataset.id)));
+    .querySelectorAll('.receive-btn')
+    .forEach((b) => b.addEventListener('click', () => openReceiveStock(b.dataset.id)));
   document
     .querySelectorAll('.edit-btn')
     .forEach((b) => b.addEventListener('click', () => openEdit(b.dataset.id)));
@@ -779,6 +780,55 @@ function renderRows() {
     .querySelectorAll('.delete-btn')
     .forEach((b) => b.addEventListener('click', () => removeProduct(b.dataset.id)));
 }
+function renderSalesDesk() {
+  const query = el('salesSearch').value.trim().toLowerCase();
+  const products = state.products.filter((product) => product.name.toLowerCase().includes(query))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  el('salesProductRows').innerHTML = products.length ? products.map((product) => `
+    <tr><td><div class="item-cell">${productVisual(product, 'mini-emoji')}${escapeHtml(product.name)}</div></td>
+    <td>${Number(product.stock)}</td><td>${money(product.price)}</td>
+    <td><button class="row-action sell-btn" data-id="${escapeHtml(product.id)}" ${product.stock < 1 ? 'disabled' : ''}>${product.stock < 1 ? 'Out of stock' : 'Record sale'}</button></td></tr>`).join('')
+    : '<tr><td colspan="4"><div class="empty">No matching products. Add products in Inventory.</div></td></tr>';
+  el('salesProductRows').querySelectorAll('.sell-btn').forEach((button) =>
+    button.addEventListener('click', () => openSale(button.dataset.id)));
+  el('recentSalesRows').innerHTML = state.activity.slice(0, 10).map(saleFinancials).map((sale) => `
+    <tr><td>${escapeHtml(new Date(sale.date).toLocaleString('en-PH'))}</td><td>${escapeHtml(sale.name)}</td>
+    <td>${sale.qty}</td><td>${money(sale.revenue)}</td></tr>`).join('')
+    || '<tr><td colspan="4"><div class="empty">No sales recorded yet.</div></td></tr>';
+}
+function openReceiveStock(id) {
+  const product = byId(id);
+  if (!product) return;
+  el('receiveProductId').value = id;
+  el('receiveProductName').textContent = `${product.name} ? ${product.stock} currently in stock`;
+  el('receiveQty').value = '';
+  el('receiveDialog').showModal();
+  el('receiveQty').focus();
+}
+el('salesSearch').addEventListener('input', renderSalesDesk);
+el('cancelReceive').addEventListener('click', () => el('receiveDialog').close());
+el('receiveForm').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const product = byId(el('receiveProductId').value);
+  const quantity = Number(el('receiveQty').value);
+  if (!product || !Number.isSafeInteger(quantity) || quantity < 1 || !Number.isSafeInteger(Number(product.stock) + quantity)) return;
+  const previous = structuredClone(state);
+  el('saveReceive').disabled = true;
+  product.stock = Number(product.stock) + quantity;
+  const saved = persist();
+  const synced = remoteUser ? await remoteSavePromise : true;
+  if (!saved || !synced) {
+    state = previous;
+    try { localStorage.setItem(activeShopDataKey, JSON.stringify(state)); } catch {}
+    toast('Stock could not be saved. Please try again.');
+  } else {
+    el('receiveDialog').close();
+    render();
+    toast(`${quantity} units received.`);
+  }
+  el('saveReceive').disabled = false;
+});
+
 function renderRanks() {
   const mode = document.querySelector('.ranking-tabs button.selected')?.dataset.rank || 'best';
   const sorted = [...state.products].sort((a, b) =>
@@ -1464,14 +1514,16 @@ el('productForm').addEventListener('submit', async (event) => {
     button.disabled = false;
   }
 });
-el('saleForm').addEventListener('submit', (e) => {
+el('saleForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const p = byId(el('saleId').value),
     qty = Number(el('saleQty').value);
-  if (!p || qty < 1 || qty > p.stock) {
+  if (!p || !Number.isSafeInteger(qty) || qty < 1 || qty > p.stock) {
     toast('Please enter a quantity available in stock.');
     return;
   }
+  const previous = structuredClone(state);
+  el('saveSale').disabled = true;
   const unitPrice = Number(p.price),
     unitCost = Number(p.cost || 0),
     unitProfit = unitPrice - unitCost,
@@ -1493,7 +1545,15 @@ el('saleForm').addEventListener('submit', (e) => {
     revenue: qty * unitPrice,
     grossProfit: qty * unitProfit,
   });
-  persist();
+  const saved = persist();
+  const synced = remoteUser ? await remoteSavePromise : true;
+  el('saveSale').disabled = false;
+  if (!saved || !synced) {
+    state = previous;
+    try { localStorage.setItem(activeShopDataKey, JSON.stringify(state)); } catch {}
+    toast('Sale could not be saved. Please try again.');
+    return;
+  }
   render();
   closeSale();
   toast('Sale recorded!');
@@ -1545,21 +1605,25 @@ document.querySelectorAll('button[data-view]').forEach((b) =>
     const labels = {
       overview: 'Dashboard',
       inventory: 'Inventory',
+      sales: 'Sales',
       rankings: 'Rankings',
-      profits: 'Profits',
+      profits: 'Accounting',
       profile: 'Profile',
       admin: 'Admin',
     };
     el('crumbText').textContent = labels[view];
-    if (view === 'inventory') {
+    if (view === 'sales') {
+      el('pageTitle').textContent = 'Record customer sales';
+      el('pageSub').textContent = 'Choose products, record quantities, and update stock.';
+    } else if (view === 'inventory') {
       el('pageTitle').textContent = 'Your inventory, at a glance.';
       el('pageSub').textContent = 'Keep track of every item on your shelves.';
     } else if (view === 'rankings') {
       el('pageTitle').textContent = 'Your sale history.';
       el('pageSub').textContent = 'See which products sell most and least.';
     } else if (view === 'profits') {
-      el('pageTitle').textContent = 'Your profit picture.';
-      el('pageSub').textContent = 'See what your products earn after their cost.';
+      el('pageTitle').textContent = 'Accounting & reports';
+      el('pageSub').textContent = 'Review revenue, product costs, gross profit, and sales receipts.';
     } else if (view === 'profile') {
       el('pageTitle').textContent = 'Your shop profile.';
       el('pageSub').textContent = 'Edit the details you use to manage your store.';

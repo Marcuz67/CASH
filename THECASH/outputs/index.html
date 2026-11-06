@@ -1,0 +1,686 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#e9edf3" />
+    <title>C.A.S.H. — Central Accountant and Storage Helper</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body data-view="overview">
+    <!-- Local sign-in and account creation -->
+    <section class="auth-screen" id="authScreen" aria-labelledby="authTitle">
+      <div class="auth-card">
+        <div class="auth-brand">
+          <span class="brand-mark">C</span
+          ><span
+            ><strong>C.A.S.H.</strong><small>Central Accountant and Storage Helper</small></span
+          >
+        </div>
+        <h1 id="authTitle">Welcome back</h1>
+        <p class="auth-intro" id="authIntro">Sign in to open your shop dashboard.</p>
+        <form id="authForm" class="auth-form">
+          <div class="field" id="authNameField" hidden>
+            <label for="authName">Your name</label
+            ><input
+              id="authName"
+              autocomplete="name"
+              maxlength="50"
+              placeholder="First and last name"
+            />
+          </div>
+          <div class="field">
+            <label for="authUsername" id="authUsernameLabel">Username</label
+            ><input
+              id="authUsername"
+              type="text"
+              autocomplete="username"
+              minlength="3"
+              maxlength="80"
+              required
+              placeholder="Your username"
+            />
+          </div>
+          <div class="field">
+            <label for="authPassword">Password</label
+            ><input
+              id="authPassword"
+              type="password"
+              autocomplete="current-password"
+              minlength="4"
+              required
+              placeholder="At least 4 characters"
+            />
+          </div>
+          <div class="field" id="authConfirmField" hidden>
+            <label for="authConfirmPassword">Confirm password</label
+            ><input
+              id="authConfirmPassword"
+              type="password"
+              autocomplete="new-password"
+              minlength="4"
+              placeholder="Enter your password again"
+            />
+          </div>
+          <p class="auth-message" id="authMessage" aria-live="polite"></p>
+          <button class="primary auth-submit" type="submit" id="authSubmit">Log in</button>
+        </form>
+        <button class="auth-mode-toggle" id="authModeToggle" type="button">
+          Create an account
+        </button>
+        <p class="auth-local-note" id="authLocalNote">
+          This school project saves accounts and shop records only in this browser. It does not use
+          an online server.
+        </p>
+      </div>
+    </section>
+
+    <!-- Main inventory app -->
+    <div class="app" id="app" hidden>
+      <!-- Sidebar navigation, account profile, and theme controls -->
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="brand-mark">C</span
+          ><span class="brand-copy"
+            ><strong>C.A.S.H.</strong><small>Central Accountant and Storage Helper</small></span
+          >
+        </div>
+        <div class="nav-label">YOUR WORKSPACE</div>
+        <nav class="nav" aria-label="Main navigation">
+          <button class="active" data-view="overview">
+            <span class="nav-icon">🏠</span>Dashboard
+          </button>
+          <button data-view="sales"><span class="nav-icon">&#129534;</span>Sales</button>
+          <button data-view="inventory">
+            <span class="nav-icon">📦</span>Inventory
+            <span class="nav-badge" id="lowBadge">3 low</span>
+          </button>
+          <button data-view="rankings"><span class="nav-icon">🏆</span>Rankings</button>
+          <button data-view="profits"><span class="nav-icon">💵</span>Accounting</button>
+          <button data-view="admin" id="adminNav" hidden>
+            <span class="nav-icon">🛡️</span>Admin
+          </button>
+          <div class="nav-footer-row">
+            <button data-view="profile"><span class="nav-icon">👤</span>Profile</button
+            ><button
+              class="nav-theme-toggle"
+              id="mobileThemeToggle"
+              aria-label="Switch to dark mode"
+              title="Switch to dark mode"
+            >
+              <span class="nav-icon">☾</span><span class="theme-label">Dark mode</span>
+            </button>
+          </div>
+        </nav>
+        <div class="sidebar-bottom">
+          <div class="profile-theme-row">
+            <button class="profile profile-link" data-view="profile" aria-label="Open profile">
+              <span class="avatar">A</span
+              ><span><strong>Alex Morgan</strong><small>Shop owner</small></span></button
+            ><button
+              class="theme-footer-toggle"
+              id="themeToggle"
+              aria-label="Switch to dark mode"
+              title="Switch to dark mode"
+            >
+              <span class="theme-symbol">☾</span>
+            </button>
+          </div>
+        </div>
+      </aside>
+      <!-- Main dashboard and feature tabs -->
+      <main>
+        <div class="topbar">
+          <div class="crumb">C.A.S.H. <span> / </span> <b id="crumbText">Dashboard</b></div>
+          <div class="top-right">
+            <button class="primary add-button" id="addProductTop">
+              <span class="plus">＋</span>Add item</button
+            ><button
+              class="icon-button"
+              id="profitCheckButton"
+              aria-label="Profit since your last check"
+              title="Profit since your last check"
+            >
+              🔔<i class="notice-dot"></i></button
+            ><button class="store-switch">
+              <span class="store-icon">🏪</span> <span id="storeNameText">Sunny Side Market</span>⌄
+            </button>
+          </div>
+        </div>
+        <div class="page-heading">
+          <div>
+            <div class="eyebrow" id="todayLabel">SATURDAY, OCTOBER 17</div>
+            <h1 id="pageTitle">Dashboard</h1>
+            <p class="subheading" id="pageSub">Here’s what’s happening with your store today.</p>
+          </div>
+        </div>
+        <section class="stats" aria-label="Store summary">
+          <div class="stat">
+            <div class="stat-top">Sales this week <span class="stat-icon mint">📈</span></div>
+            <div class="stat-value" id="salesStat">₱18,420</div>
+            <div class="stat-foot"><span class="up">↑ 12.8%</span> vs last week</div>
+          </div>
+          <div class="stat">
+            <div class="stat-top">Products in stock <span class="stat-icon blue">📦</span></div>
+            <div class="stat-value" id="stockStat">248</div>
+            <div class="stat-foot" id="stockFoot">Across 18 products</div>
+          </div>
+          <div class="stat">
+            <div class="stat-top">Items sold <span class="stat-icon peach">🛍️</span></div>
+            <div class="stat-value" id="unitsStat">136</div>
+            <div class="stat-foot"><span class="up">↑ 8.4%</span> this week</div>
+          </div>
+          <div class="stat">
+            <div class="stat-top">Needs a restock <span class="stat-icon yellow">🚨</span></div>
+            <div class="stat-value" id="lowStat">3</div>
+            <div class="stat-foot"><span class="down">Take a look</span> before you run out</div>
+          </div>
+        </section>
+        <section class="content-grid">
+          <article class="panel">
+            <div class="panel-head">
+              <div>
+                <div class="panel-title">Sales momentum</div>
+                <div class="panel-caption">Daily gross profit this week</div>
+              </div>
+              <div class="inventory-tools">
+                <button class="profit-goal-button" id="profitGoalsButton">⚙ Profit goals</button
+                ><span class="period">THIS WEEK</span>
+              </div>
+            </div>
+            <div class="chart-area">
+              <div class="chart-y">
+                <span id="chartAxisTop">₱5k</span><span id="chartAxisMid">₱2.5k</span
+                ><span>₱0</span>
+              </div>
+              <div class="chart" id="chart"></div>
+            </div>
+            <div class="day-labels" id="dayLabels"></div>
+            <div class="chart-legend">
+              <span><i class="legend-red"></i><b id="chartLegendRed">Below goal</b></span
+              ><span><i class="legend-blue"></i><b id="chartLegendBlue">On track</b></span
+              ><span><i class="legend-green"></i><b id="chartLegendGreen">Good</b></span>
+            </div>
+            <div class="chart-summary">
+              <span>Best profit day <strong id="bestDay">Friday</strong></span
+              ><span><b id="weekTotal">₱18,420</b> weekly gross profit</span>
+            </div>
+          </article>
+        </section>
+        <section class="rankings-view" id="rankingsView">
+          <article class="panel ranking-panel" id="rankingCard">
+            <div class="panel-head">
+              <div>
+                <div class="panel-title">Product rankings</div>
+                <div class="panel-caption" id="rankCaption">Who’s winning the week?</div>
+              </div>
+              <div class="ranking-tabs">
+                <button class="selected" data-rank="best">Best sellers</button
+                ><button data-rank="worst">Low Sellers</button>
+              </div>
+            </div>
+            <div class="rank-list" id="rankList"></div>
+            <div class="rank-foot" id="rankFoot">
+              🏆 <b>Top tip:</b> Keep your crowd favorite in stock to hold onto first place.
+            </div>
+          </article>
+        </section>
+        <section class="sales-view" id="salesView" aria-label="Record sales">
+          <div class="workflow-note"><strong>Sales desk</strong><span>Choose an item to record a customer purchase. Stock updates when you save the sale.</span></div>
+          <article class="panel">
+            <div class="panel-head"><div><div class="panel-title">Record a sale</div><div class="panel-caption">Available products and selling prices</div></div>
+              <label class="search"><input id="salesSearch" type="search" placeholder="Search products..." aria-label="Search products to sell"></label>
+            </div>
+            <div class="table-wrap"><table><thead><tr><th>PRODUCT</th><th>AVAILABLE</th><th>UNIT PRICE</th><th>ACTION</th></tr></thead><tbody id="salesProductRows"></tbody></table></div>
+          </article>
+          <article class="panel sales-recent"><div class="panel-head"><div><div class="panel-title">Recent sales</div><div class="panel-caption">Latest 10 transactions. Full records and PDF receipts are in Accounting.</div></div></div>
+            <div class="table-wrap"><table><thead><tr><th>DATE</th><th>PRODUCT</th><th>QUANTITY</th><th>TOTAL</th></tr></thead><tbody id="recentSalesRows"></tbody></table></div>
+          </article>
+        </section>
+        <section class="panel inventory-panel" id="inventorySection">
+          <div class="panel-head">
+            <div>
+              <div class="panel-title">Your products</div>
+              <div class="panel-caption">Manage products, prices, and stock. Record customer purchases in Sales.</div>
+            </div>
+            <div class="inventory-tools">
+              <label class="search"
+                ><span>⌕</span
+                ><input
+                  id="search"
+                  type="search"
+                  placeholder="Find a product…"
+                  aria-label="Find a product" /></label
+              ><select class="filter" id="categoryFilter">
+                <option value="all">All items</option>
+              </select>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>PRODUCT</th>
+                  <th>CATEGORY</th>
+                  <th>IN STOCK</th>
+                  <th>PRICE</th>
+                  <th>SOLD</th>
+                  <th>STATUS</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="productRows"></tbody>
+            </table>
+          </div>
+        </section>
+        <section class="profit-view" id="profitsView">
+          <div class="stats profit-stats" aria-label="Profit summary">
+            <div class="stat profit-highlight">
+              <div class="stat-top">Gross profit <span class="stat-icon mint">💰</span></div>
+              <div class="stat-value" id="profitGross">₱0</div>
+              <div class="stat-foot">From products sold</div>
+            </div>
+            <div class="stat">
+              <div class="stat-top">Sales revenue <span class="stat-icon blue">📈</span></div>
+              <div class="stat-value" id="profitRevenue">₱0</div>
+              <div class="stat-foot">Retail value of items sold</div>
+            </div>
+            <div class="stat">
+              <div class="stat-top">Product costs <span class="stat-icon peach">🧾</span></div>
+              <div class="stat-value" id="profitCosts">₱0</div>
+              <div class="stat-foot">Cost of goods sold</div>
+            </div>
+            <div class="stat">
+              <div class="stat-top">Gross margin <span class="stat-icon yellow">🎯</span></div>
+              <div class="stat-value" id="profitMargin">0%</div>
+              <div class="stat-foot">Profit as a share of revenue</div>
+            </div>
+          </div>
+          <article class="panel profit-panel">
+            <div class="panel-head">
+              <div>
+                <div class="panel-title">Profit by product</div>
+                <div class="panel-caption">
+                  Ranked by estimated gross profit from all recorded units sold
+                </div>
+              </div>
+              <span class="period">ALL TIME</span>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>PRODUCT</th>
+                    <th>UNITS SOLD</th>
+                    <th>UNIT COST</th>
+                    <th>UNIT PROFIT</th>
+                    <th>GROSS PROFIT</th>
+                    <th>MARGIN</th>
+                  </tr>
+                </thead>
+                <tbody id="profitRows"></tbody>
+              </table>
+            </div>
+            <div class="profit-note">
+              <span>ⓘ</span> Gross profit is calculated as (price − unit cost) × units sold. It
+              excludes rent, payroll, taxes, and other operating expenses.
+            </div>
+          </article>
+          <article class="panel sales-record-panel">
+            <div class="panel-head">
+              <div>
+                <div class="panel-title">Sales records &amp; receipts</div>
+                <div class="panel-caption">
+                  Choose a date range or download the latest sale from this month.
+                </div>
+              </div>
+              <button class="secondary" id="latestMonthPdf">Latest sale this month · PDF</button>
+            </div>
+            <div class="receipt-controls">
+              <label class="field"
+                ><span>From</span
+                ><input id="recordFrom" type="date" aria-label="Sales records from date" /></label
+              ><label class="field"
+                ><span>To</span
+                ><input id="recordTo" type="date" aria-label="Sales records to date" /></label
+              ><button class="primary" id="rangePdf">Download range PDF</button>
+            </div>
+            <div class="record-summary" id="recordSummary">No sales in this date range.</div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>DATE</th>
+                    <th>PRODUCT</th>
+                    <th>QTY</th>
+                    <th>SALE TOTAL</th>
+                    <th>GROSS PROFIT</th>
+                  </tr>
+                </thead>
+                <tbody id="salesRecordRows"></tbody>
+              </table>
+            </div>
+          </article>
+        </section>
+        <section class="profile-view" id="profileView">
+          <article class="panel profile-panel">
+            <div class="panel-head">
+              <div>
+                <div class="panel-title">Shop profile</div>
+                <div class="panel-caption">
+                  Keep your shop details and owner profile up to date.
+                </div>
+              </div>
+              <div class="profile-header-actions">
+                <span class="period" id="profileDataBadge">LOCAL DATA</span
+                ><button class="secondary" id="switchAccountButton" type="button">
+                  Switch account
+                </button>
+              </div>
+            </div>
+            <div class="profile-editor">
+              <div class="profile-preview">
+                <div
+                  class="profile-avatar-large"
+                  id="profileAvatarLarge"
+                  role="img"
+                  aria-label="Profile picture"
+                >
+                  A
+                </div>
+                <strong id="profilePreviewName">Alex Morgan</strong
+                ><span id="profilePreviewShop">Sunny Side Market</span
+                ><small id="profilePreviewLocation">Shop owner</small>
+                <div class="profile-photo-actions">
+                  <label class="secondary profile-photo-picker" for="profilePhoto"
+                    >📷 Choose photo</label
+                  ><input
+                    id="profilePhoto"
+                    class="visually-hidden"
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    aria-label="Choose a profile photo"
+                  /><button class="secondary" type="button" id="removeProfilePhoto" hidden>
+                    Remove photo</button
+                  ><button class="secondary" type="button" id="saveProfilePhoto" hidden>
+                    Save photo
+                  </button>
+                </div>
+                <small class="profile-photo-help" id="profilePhotoHelp">
+                  Square preview · up to 10 MB. Save profile to apply changes.
+                </small>
+              </div>
+              <form id="profileForm" class="profile-fields">
+                <div class="field">
+                  <label for="ownerName">Your name</label
+                  ><input id="ownerName" name="owner" required maxlength="50" />
+                </div>
+                <div class="field">
+                  <label for="shopName">Shop name</label
+                  ><input id="shopName" name="store" required maxlength="60" />
+                </div>
+                <div class="field">
+                  <label for="shopLocation">Location (optional)</label
+                  ><input
+                    id="shopLocation"
+                    name="location"
+                    maxlength="80"
+                    placeholder="City or neighborhood"
+                  />
+                </div>
+                <div class="profile-actions">
+                  <span class="profile-save-note" id="profileSaveNote"
+                    >Your profile is saved in this browser.</span
+                  ><button class="primary" type="submit">Save profile</button>
+                </div>
+                <div class="profile-account-row">
+                  <span>Signed in as <strong id="activeAccountName">shop owner</strong></span>
+                </div>
+              </form>
+            </div>
+          </article>
+        </section>
+        <section class="admin-view" id="adminView" hidden>
+          <article class="panel admin-panel">
+            <div class="panel-head">
+              <div>
+                <div class="panel-title">Account administration</div>
+                <div class="panel-caption">
+                  Approve new account requests and remove shop profiles.
+                </div>
+              </div>
+              <button class="secondary" id="refreshAdmin" type="button">Refresh</button>
+            </div>
+            <h2>Waiting for approval</h2>
+            <div class="admin-list" id="adminPendingList">
+              <div class="empty">Loading requests…</div>
+            </div>
+            <h2>Approved profiles</h2>
+            <div class="admin-list" id="adminProfilesList">
+              <div class="empty">Loading profiles…</div>
+            </div>
+          </article>
+        </section>
+      </main>
+    </div>
+    <!-- Product, sale, profit goal, and reminder dialogs -->
+    <div
+      class="modal-backdrop"
+      id="modalBackdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="modalTitle"
+    >
+      <div class="modal">
+        <div class="modal-head">
+          <div>
+            <h3 id="modalTitle">Add a product</h3>
+            <p id="modalIntro">Add something new to your shelves.</p>
+          </div>
+          <button class="close" id="closeModal" aria-label="Close">×</button>
+        </div>
+        <form id="productForm">
+          <input type="hidden" name="id" id="editProductId" />
+          <div class="form-grid">
+            <div class="field full">
+              <label for="productName">Product name</label
+              ><input
+                id="productName"
+                name="name"
+                placeholder="e.g. Fresh mangoes"
+                required
+                maxlength="42"
+              />
+            </div>
+            <div class="field">
+              <label for="productCategory">Category</label
+              ><select id="productCategory" name="category">
+                <option>Produce</option>
+                <option>Drinks</option>
+                <option>Snacks</option>
+                <option>Pantry</option>
+                <option>Household</option>
+                <option>Other</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="productStock">Starting stock</label
+              ><input
+                id="productStock"
+                name="stock"
+                type="number"
+                min="0"
+                step="1"
+                placeholder="0"
+                required
+              />
+            </div>
+            <div class="field">
+              <label for="productPrice">Selling price (₱)</label
+              ><input
+                id="productPrice"
+                name="price"
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="0.00"
+                required
+              />
+            </div>
+            <div class="field">
+              <label for="productCost">Unit cost (₱)</label
+              ><input
+                id="productCost"
+                name="cost"
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="0.00"
+                required
+              />
+            </div>
+            <div class="field">
+              <label for="productThreshold">Low stock alert at</label
+              ><input
+                id="productThreshold"
+                name="threshold"
+                type="number"
+                min="0"
+                step="1"
+                value="5"
+                required
+              />
+            </div>
+            <div class="field full product-photo-field">
+              <label for="productPhoto">Product photo (optional)</label
+              ><input
+                id="productPhoto"
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+              /><small>Choose an image up to 10 MB.</small>
+              <div class="product-photo-preview" id="productPhotoPreview" hidden>
+                <img id="productPhotoPreviewImage" alt="Product photo preview" /><button
+                  type="button"
+                  class="secondary"
+                  id="removeProductPhoto"
+                >
+                  Remove photo
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="secondary" id="cancelModal">Cancel</button
+            ><button type="submit" class="primary" id="saveProduct">Save product</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    <div
+      class="modal-backdrop"
+      id="saleBackdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="saleTitle"
+    >
+      <div class="modal">
+        <div class="modal-head">
+          <div>
+            <h3 id="saleTitle">Record a sale</h3>
+            <p id="saleIntro">Log what just went out the door.</p>
+          </div>
+          <button class="close" id="closeSale" aria-label="Close">×</button>
+        </div>
+        <form id="saleForm">
+          <input type="hidden" name="id" id="saleId" />
+          <div class="form-grid">
+            <div class="field full">
+              <label for="saleProduct">Product</label><input id="saleProduct" readonly />
+            </div>
+            <div class="field full">
+              <label for="saleQty">Quantity sold</label
+              ><input id="saleQty" name="qty" type="number" min="1" step="1" value="1" required />
+            </div>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="secondary" id="cancelSale">Cancel</button
+            ><button type="submit" class="primary" id="saveSale">Record sale</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    <div
+      class="modal-backdrop"
+      id="goalsBackdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="goalsTitle"
+    >
+      <div class="modal">
+        <div class="modal-head">
+          <div>
+            <h3 id="goalsTitle">Set your profit goals</h3>
+            <p>Choose daily gross profit levels for the chart colors.</p>
+          </div>
+          <button class="close" id="closeGoals" aria-label="Close">×</button>
+        </div>
+        <form id="goalsForm">
+          <div class="form-grid">
+            <div class="field">
+              <label for="goalRedBelow">Red below (₱)</label
+              ><input id="goalRedBelow" type="number" min="0" step="100" required />
+            </div>
+            <div class="field">
+              <label for="goalGoodFrom">Green from (₱)</label
+              ><input id="goalGoodFrom" type="number" min="0" step="100" required />
+            </div>
+          </div>
+          <div class="goal-summary" id="goalSummary"></div>
+          <div class="goal-note">
+            The blue “on track” band automatically covers the range between your red and green
+            goals.
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="secondary" id="cancelGoals">Cancel</button
+            ><button type="submit" class="primary">Save profit goals</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    <div
+      class="modal-backdrop"
+      id="profitCheckBackdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="profitCheckTitle"
+    >
+      <div class="modal profit-check-modal">
+        <div class="modal-head">
+          <div><h3 id="profitCheckTitle">Your profit check-in</h3></div>
+          <button class="close" id="closeProfitCheck" aria-label="Close">×</button>
+        </div>
+        <div class="profit-check-icon">₱</div>
+        <div class="profit-check-amount" id="profitCheckAmount">₱0</div>
+        <p class="profit-check-message" id="profitCheckMessage"></p>
+        <div class="profit-check-time" id="profitCheckTime"></div>
+        <div class="modal-actions">
+          <button type="button" class="primary" id="dismissProfitCheck">Got it</button>
+        </div>
+      </div>
+    </div>
+    <!-- Profile photo crop dialog -->
+    <dialog id="receiveDialog" class="receive-dialog">
+      <form id="receiveForm">
+        <h2>Receive stock</h2><p id="receiveProductName"></p>
+        <input type="hidden" id="receiveProductId">
+        <div class="field"><label for="receiveQty">Units received</label><input id="receiveQty" type="number" min="1" step="1" required></div>
+        <p class="panel-caption">Adds units to available stock. This does not record a customer sale or purchase expense.</p>
+        <div class="modal-actions"><button type="button" class="secondary" id="cancelReceive">Cancel</button><button class="primary" id="saveReceive">Save stock</button></div>
+      </form>
+    </dialog>
+    <div class="toast" id="toast" role="status"></div>
+    <script src="firebase-config.js"></script>
+    <script src="firebase-setup.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

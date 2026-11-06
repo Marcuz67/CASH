@@ -85,3 +85,27 @@ New sale records keep the date, item, quantity, unit price, unit cost, revenue, 
 1. Choose **File → Open Folder…**.
 2. Select the project folder that contains `firebase.json` and `outputs`.
 3. Edit the web page in `outputs/index.html`, its appearance in `outputs/styles.css`, and its behavior in `outputs/app.js`.
+
+## Separate workspaces
+
+- **Dashboard:** store summary and daily profit chart.
+- **Sales:** search products, record customer purchases, and view recent transactions. Sales deduct stock; no product editing controls appear here.
+- **Inventory:** add/edit products, prices, costs, and stock alerts. **Receive stock** adds delivery quantities without recording a sale. This is a quantity adjustment, not a purchase expense ledger.
+- **Accounting:** profit summaries, dated sales history, and PDF receipts. This screen has no sales or inventory editing controls.
+- **Rankings:** best and low selling products.
+
+These are workflow screens within one authenticated app, not separate permission roles.
+
+## Deploy to Render
+
+Deploy as a Render **Web Service**, using the root `render.yaml` or these manual settings:
+
+- Runtime: Node.
+- Root Directory: leave blank.
+- Build Command: `npm ci && npm run build`.
+- Start Command: `npm start`.
+- Health Check Path: `/health`.
+
+Push the updated repository before deploying. The plain JavaScript server serves the HTML, CSS and JavaScript on Render's `PORT` at `0.0.0.0`. Run `npm install` and `npm start` from the repository root to preview at http://localhost:3000.
+
+The server hosts the website; accounts and shop records still use browser storage unless optional Firebase is configured. A Web Service alone does not add a shared database. Firebase backend services need their separate setup.

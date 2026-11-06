@@ -3841,3 +3841,28 @@ body.dark .admin-row {
     flex-direction: column;
   }
 }
+
+/* Separate workspace screens: transactions, storage, and reporting. */
+.sales-view { display: none; }
+body[data-view='sales'] main > .stats,
+body[data-view='sales'] main > .content-grid { display: none; }
+body[data-view='sales'] main > .sales-view { display: block; }
+#addProductTop { display: none; }
+body[data-view='inventory'] #addProductTop { display: inline-flex; }
+#profitCheckButton { display: none; }
+body[data-view='overview'] #profitCheckButton,
+body[data-view='profits'] #profitCheckButton { display: inline-flex; }
+.workflow-note { display: flex; flex-direction: column; gap: 8px; padding: 20px; margin-bottom: 20px; border-radius: 16px; background: var(--panel, #fff); border: 1px solid #cad4de; }
+.workflow-note span { line-height: 1.5; }
+.sales-recent { margin-top: 24px; }
+.sell-btn:disabled { opacity: .5; cursor: not-allowed; }
+.receive-dialog { width: min(440px, calc(100% - 32px)); padding: 28px; border: 1px solid #cad4de; border-radius: 20px; color: inherit; background: #fff; }
+.receive-dialog::backdrop { background: rgb(10 20 35 / 50%); }
+.receive-dialog .field { margin: 20px 0; }
+.receive-dialog .panel-caption { line-height: 1.5; }
+body.dark .workflow-note, body.dark .receive-dialog { background: #202a38; color: #edf2f7; border-color: #465365; }
+@media (max-width: 640px) {
+  .sales-view .panel-head { align-items: stretch; flex-direction: column; gap: 14px; }
+  .sales-view .search { width: 100%; }
+  .receive-dialog { padding: 20px; }
+}
