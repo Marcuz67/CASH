@@ -39,7 +39,7 @@ function normalize(saved) {
   const defaults = newStore();
   return { ...defaults, ...saved, profile: { ...defaults.profile, ...saved?.profile },
     profitGoals: { ...defaults.profitGoals, ...saved?.profitGoals },
-    products: (saved?.products || []).map((product) => ({ sold: 0, threshold: 5, cost: 0, ...product })),
+    products: (saved?.products || []).map((product) => ({ sold: 0, threshold: 5, cost: 0, saleEnabled: true, saleLimit: 5, ...product })),
     activity: saved?.activity || [] };
 }
 function toast(message) {
@@ -49,17 +49,21 @@ function toast(message) {
 function syncStatus(message) { $('connectionStatus').textContent = message; }
 function setBusy(value) {
   saving = value;
-  document.querySelectorAll('form button[type="submit"], button[data-action], #addProduct').forEach((button) => { button.disabled = value || uncertainSave || (button.dataset.action === 'sell' && byId(button.dataset.id)?.stock < 1); });
+  document.querySelectorAll('form button[type="submit"], button[data-action], #addProduct').forEach((button) => { button.disabled = value || uncertainSave || (button.dataset.action === 'sell' && (!byId(button.dataset.id)?.saleEnabled || byId(button.dataset.id)?.stock < 1)); });
+  if ($('saleDialog').open) {
+    const product = byId($('saleProductId').value);
+    $('confirmSale').disabled = value || uncertainSave || !product || !product.saleEnabled || product.stock < 1;
+  }
   syncStatus(value ? 'Saving...' : 'Connected to shared store');
 }
 async function readStore() {
-  const response = await fetch('/api/shop', { cache: 'no-store' });
+  const response = await fetch(mode === 'buyer' ? '/api/catalog' : '/api/shop', { cache: 'no-store' });
   if (!response.ok) throw new Error('Could not connect to the store database.');
   return response.json();
 }
 function accept(data) { state = normalize(data.state); revision = data.revision; }
 async function commit(change) {
-  if (saving || uncertainSave) return false;
+  if (mode !== 'admin' || saving || uncertainSave) return false;
   const next = structuredClone(state);
   try { change(next); } catch (error) { toast(error.message); return false; }
   setBusy(true);
@@ -108,11 +112,6 @@ async function start() {
   $('loading').hidden = false; $('loadError').hidden = true;
   try {
     let data = await readStore();
-    if (!data.state) {
-      const response = await fetch('/api/shop', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ state: newStore(), revision: data.revision }) });
-      if (!response.ok && response.status !== 409) throw new Error('Could not create the store records.');
-      data = await readStore();
-    }
     accept(data); $('loading').hidden = true; $('views').hidden = false;
     render(); showView(view); syncStatus('Connected to shared store');
     clearInterval(pollTimer); pollTimer = setInterval(refresh, 5000);
@@ -173,6 +172,8 @@ function setCategories(id, categories) {
 function render() {
   if (!state) return;
   $('shopName').textContent = state.profile.store || 'Your store';
+  $('sampleCatalogNotice').hidden = !state.sampleCatalog;
+  $('markCatalogReviewed').hidden = mode !== 'admin';
   const categories = [...new Set(state.products.map((product) => product.category))].sort();
   setCategories('salesCategory', categories); setCategories('inventoryCategory', categories);
   $('categoryOptions').innerHTML = categories.map((category) => `<option value="${esc(category)}"></option>`).join('');
@@ -184,16 +185,17 @@ function filteredProducts(search, category) {
   return state.products.filter((product) => product.name.toLowerCase().includes(query) && (!selected || product.category === selected)).sort((a, b) => a.name.localeCompare(b.name));
 }
 function renderCatalog() {
-  const products = filteredProducts('salesSearch', 'salesCategory');
+  const products = filteredProducts('salesSearch', 'salesCategory').filter((product) => product.saleEnabled);
   $('catalogCount').textContent = `${products.length} product${products.length === 1 ? '' : 's'}`;
-  $('productCatalog').innerHTML = products.length ? products.map((product) => `<article class="product-card">${product.photo ? `<img class="catalog-photo" src="${esc(product.photo)}" alt="${esc(product.name)}" loading="lazy">` : `<div class="catalog-placeholder" aria-hidden="true">${esc(product.name.charAt(0).toUpperCase())}</div>`}<div class="product-card-content"><span class="category">${esc(product.category)}</span><h2>${esc(product.name)}</h2><div class="product-price">${money(product.price)}</div><div class="availability">${product.stock === 0 ? 'Out of stock' : `${product.stock} available`}</div><button type="button" class="primary" data-action="sell" data-id="${esc(product.id)}" ${product.stock < 1 || saving || uncertainSave ? 'disabled' : ''}>${product.stock < 1 ? 'Out of stock' : mode === 'buyer' ? 'Buy item' : 'Record sale'}</button></div></article>`).join('') : empty(state.products.length ? 'No products match your search.' : mode === 'buyer' ? 'There are no products available yet. Please check again later.' : 'No products yet. Add your first product in Inventory.');
+  $('productCatalog').innerHTML = products.length ? products.map((product) => `<article class="product-card">${product.photo ? `<img class="catalog-photo" src="${esc(product.photo)}" alt="${esc(product.name)}" loading="lazy">` : `<div class="catalog-placeholder" aria-hidden="true">${esc(product.category)}</div>`}<div class="product-card-content"><span class="category">${esc(product.category)}</span><h2>${esc(product.name)}</h2><div class="product-price">${money(product.price)}</div><div class="availability">${product.stock === 0 ? 'Out of stock' : `${product.stock} available`}</div><div class="purchase-limit">Maximum ${product.saleLimit} per purchase</div><button type="button" class="primary" data-action="sell" data-id="${esc(product.id)}" ${product.stock < 1 || saving || uncertainSave ? 'disabled' : ''}>${product.stock < 1 ? 'Out of stock' : mode === 'buyer' ? 'Buy item' : 'Record sale'}</button></div></article>`).join('') : empty(mode === 'buyer' ? 'No products are currently offered for sale. Please check again later.' : 'No matching products are enabled for sale. Set Buyer availability in Inventory.');
 }
+
 function renderInventory() {
   const products = filteredProducts('inventorySearch', 'inventoryCategory');
   const low = state.products.filter((product) => product.stock <= product.threshold);
   $('lowStockBadge').textContent = low.length; $('lowStockBadge').hidden = low.length === 0;
   $('inventorySummary').textContent = `${state.products.length} products | ${state.products.reduce((sum, product) => sum + product.stock, 0)} units in stock | ${low.length} stock alerts`;
-  $('inventoryTable').innerHTML = table(['Product', 'Stock', 'Unit cost', 'Selling price', 'Restock level', 'Status', 'Actions'], products.map((product) => `<tr><td>${productCell(product)}</td><td>${product.stock}</td><td>${money(product.cost)}</td><td>${money(product.price)}</td><td>${product.threshold}</td><td>${stockBadge(product)}</td><td><div class="row-actions"><button type="button" data-action="receive" data-id="${esc(product.id)}">Receive</button><button type="button" data-action="edit" data-id="${esc(product.id)}">Edit</button><button type="button" class="danger" data-action="remove" data-id="${esc(product.id)}">Remove</button></div></td></tr>`), 'No products found. Use Add product to create an item.');
+  $('inventoryTable').innerHTML = table(['Product', 'Stock', 'Unit cost', 'Selling price', 'Buyer sale', 'Limit / purchase', 'Status', 'Actions'], products.map((product) => `<tr><td>${productCell(product)}</td><td>${product.stock}</td><td>${money(product.cost)}</td><td>${money(product.price)}</td><td><span class="badge ${product.saleEnabled ? 'ok' : 'paused'}">${product.saleEnabled ? 'For sale' : 'Paused'}</span></td><td>${product.saleLimit}</td><td>${stockBadge(product)}</td><td><div class="row-actions"><button type="button" data-action="toggleSale" data-id="${esc(product.id)}">${product.saleEnabled ? 'Pause sale' : 'Offer for sale'}</button><button type="button" data-action="receive" data-id="${esc(product.id)}">Receive</button><button type="button" data-action="edit" data-id="${esc(product.id)}">Edit</button><button type="button" class="danger" data-action="remove" data-id="${esc(product.id)}">Remove</button></div></td></tr>`), 'No products found. Use Add product to create an item.');
 }
 function renderOverview() {
   const now = new Date(); const month = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
@@ -252,13 +254,14 @@ function openProduct(id = '') {
   $('productDialogTitle').textContent = product ? 'Edit product' : 'Add product';
   $('productName').value = product?.name || ''; $('productCategory').value = product?.category || '';
   $('productStock').value = product?.stock ?? 0; $('productThreshold').value = product?.threshold ?? 5;
+  $('productSaleEnabled').value = String(product?.saleEnabled ?? true); $('productSaleLimit').value = product?.saleLimit ?? 5;
   $('productPrice').value = product?.price ?? ''; $('productCost').value = product?.cost ?? '';
   productPhoto = product?.photo || null; preview('productPhotoPreview', productPhoto);
   $('productDialog').showModal(); $('productName').focus();
 }
 function openSale(id) {
   const product = byId(id);
-  if (!product || product.stock < 1 || saving || uncertainSave) return;
+  if (!product || !product.saleEnabled || product.stock < 1 || saving || uncertainSave) return;
   $('saleProductId').value = id; $('saleQuantity').value = 1;
   $('saleDialogTitle').textContent = mode === 'buyer' ? 'Confirm purchase' : 'Record sale';
   $('confirmSale').textContent = mode === 'buyer' ? 'Confirm purchase' : 'Save sale';
@@ -267,10 +270,16 @@ function openSale(id) {
 function updateSale() {
   if (!state) return;
   const product = byId($('saleProductId').value);
-  if (!product) return;
+  if (!product || !product.saleEnabled) {
+    $('saleAvailability').textContent = 'This product is no longer offered for sale.';
+    $('saleLimitNote').textContent = 'Close this form and choose another product.';
+    $('saleQuantity').max = 0; $('saleTotal').textContent = money(0); $('confirmSale').disabled = true;
+    return;
+  }
   $('saleProductName').textContent = product.name;
   $('saleAvailability').textContent = `${product.stock} available | ${money(product.price)} each`;
-  $('saleQuantity').max = product.stock;
+  $('saleQuantity').max = Math.min(product.stock, product.saleLimit);
+  $('saleLimitNote').textContent = `Admin limit: ${product.saleLimit} per purchase. You can buy up to ${Math.min(product.stock, product.saleLimit)} right now.`;
   $('saleTotal').textContent = money(product.price * Number($('saleQuantity').value || 0));
 }
 function openReceive(id) {
@@ -298,11 +307,13 @@ async function saveProduct(event) {
   const id = $('productId').value;
   const values = { name: $('productName').value.trim(), category: $('productCategory').value.trim(),
     stock: Number($('productStock').value), threshold: Number($('productThreshold').value),
-    price: Number($('productPrice').value), cost: Number($('productCost').value) };
+    price: Number($('productPrice').value), cost: Number($('productCost').value), saleEnabled: $('productSaleEnabled').value === 'true', saleLimit: Number($('productSaleLimit').value) };
   const image = productPhoto;
   const saved = await commit((next) => {
     if (!values.name || !values.category) throw new Error('Enter a product name and category.');
     requireInteger(values.stock, 0, 'Stock'); requireInteger(values.threshold, 0, 'Restock level');
+    requireInteger(values.saleLimit, 1, 'Purchase limit');
+    if (values.saleLimit > 1000000) throw new Error('The purchase limit cannot exceed 1,000,000.');
     requireAmount(values.price, 'Selling price'); requireAmount(values.cost, 'Unit cost');
     const existing = id ? next.products.find((product) => product.id === id) : null;
     if (id && !existing) throw new Error('This product was removed on another page.');
@@ -315,31 +326,41 @@ async function saveProduct(event) {
 }
 async function saveSale(event) {
   event.preventDefault();
-  const id = $('saleProductId').value; const quantity = Number($('saleQuantity').value);
-  let receipt;
-  const saved = await commit((next) => {
-    const product = next.products.find((item) => item.id === id);
+  if (saving || uncertainSave) return;
+  const product = byId($('saleProductId').value); const quantity = Number($('saleQuantity').value);
+  try {
     requireInteger(quantity, 1, 'Quantity');
-    if (!product || quantity > product.stock) throw new Error('That quantity is not available. Check the current stock.');
-    product.stock -= quantity; product.sold += quantity;
-    receipt = { id: `R${crypto.randomUUID().replace(/-/g, '')}`, productId: product.id, name: product.name,
-      qty: quantity, date: Date.now(), unitPrice: product.price, unitCost: product.cost,
-      revenue: round(quantity * product.price), grossProfit: round(quantity * (product.price - product.cost)) };
-    next.activity.unshift(receipt);
-    // Maintain the existing data fields for compatibility; screens calculate their own dated totals.
-    const weekday = (new Date(receipt.date).getDay() + 6) % 7;
-    next.weekByDay[weekday] += receipt.revenue; next.weekProfitByDay[weekday] += receipt.grossProfit;
-    next.weekUnits += quantity; next.lifetimeGrossProfit = round(next.lifetimeGrossProfit + receipt.grossProfit);
-  });
-  if (saved) {
+    if (!product || !product.saleEnabled) throw new Error('This item is not currently for sale.');
+    if (quantity > product.saleLimit) throw new Error(`This item is limited to ${product.saleLimit} per purchase.`);
+    if (quantity > product.stock) throw new Error('That quantity is not available in stock.');
+  } catch (error) { toast(error.message); return; }
+  setBusy(true);
+  try {
+    const response = await fetch('/api/sales', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ productId: product.id, quantity, revision }) });
+    if (response.status === 409) {
+      accept(await readStore()); render(); updateSale();
+      toast('The store changed. Review the latest stock and price, then try again.'); return;
+    }
+    if (!response.ok) { const error = await response.json(); toast(error.error || 'Purchase could not be recorded.'); return; }
+    const result = await response.json();
+    // Remember the confirmed receipt before refreshing so a failed refresh never repeats a purchase.
+    lastPurchase = result.receipt; revision = result.revision;
     $('saleDialog').close();
     if (mode === 'buyer') {
-      lastPurchase = receipt; $('purchaseReceipt').hidden = false;
-      $('purchaseReceiptText').textContent = `${receipt.qty} x ${receipt.name} | ${money(receipt.revenue)} | ${dateLabel(receipt.date)}`;
+      $('purchaseReceipt').hidden = false;
+      $('purchaseReceiptText').textContent = `${lastPurchase.qty} x ${lastPurchase.name} | ${money(lastPurchase.revenue)} | ${dateLabel(lastPurchase.date)}`;
     }
+    try { accept(await readStore()); render(); }
+    catch { syncStatus('Purchase saved. Refresh to update stock.'); }
     toast(mode === 'buyer' ? 'Purchase recorded.' : 'Sale recorded.');
-  }
+  } catch {
+    uncertainSave = true; $('syncNotice').hidden = false;
+    $('syncNoticeText').textContent = 'Could not confirm the purchase. Reload the store before trying again to avoid a duplicate.';
+    toast('Connection lost. Reload the store to check the saved record.');
+  } finally { setBusy(false); }
 }
+
 async function receiveStock(event) {
   event.preventDefault(); if (mode !== 'admin') return;
   const id = $('receiveProductId').value; const quantity = Number($('receiveQuantity').value);
@@ -462,6 +483,9 @@ document.addEventListener('click', (event) => {
   const id = action.dataset.id;
   if (action.dataset.action === 'sell') openSale(id);
   else if (mode === 'admin') {
+    if (action.dataset.action === 'toggleSale') {
+      commit(next => { const product = next.products.find(item => item.id === id); if (product) product.saleEnabled = !product.saleEnabled; });
+    }
     if (action.dataset.action === 'edit') openProduct(id);
     if (action.dataset.action === 'receive') openReceive(id);
     if (action.dataset.action === 'remove') openRemove(id);
@@ -469,6 +493,7 @@ document.addEventListener('click', (event) => {
 });
 document.querySelectorAll('dialog').forEach((dialog) => dialog.addEventListener('cancel', (event) => { if (saving) event.preventDefault(); }));
 $('addProduct').addEventListener('click', () => openProduct());
+$('markCatalogReviewed').addEventListener('click', () => commit(next => { next.sampleCatalog = false; }));
 $('productForm').addEventListener('submit', saveProduct); $('saleForm').addEventListener('submit', saveSale);
 $('receiveForm').addEventListener('submit', receiveStock); $('removeForm').addEventListener('submit', removeProduct);
 $('settingsForm').addEventListener('submit', saveSettings); $('settingsForm').addEventListener('input', () => { settingsDirty = true; });

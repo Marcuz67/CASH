@@ -19,7 +19,7 @@ npm install
 npm start
 ```
 
-Open http://localhost:3000/buyer or http://localhost:3000/admin. Without `DATABASE_URL`, local development uses SQLite at `data/cash.sqlite`. This folder is ignored by Git. The shared shop starts empty; add products in Admin. Older browser-only accounts and data are retained in browser storage but are not automatically imported.
+Open http://localhost:3000/buyer or http://localhost:3000/admin. Without `DATABASE_URL`, local development uses SQLite at `data/cash.sqlite`. This folder is ignored by Git. An empty, unused shop receives eight starter products once. Their prices and quantities are samples; review them in Admin before using the store. Existing stocked shops and recorded sales are preserved. Older browser-only accounts and data are retained in browser storage but are not automatically imported.
 
 ## Deploy to Render
 
@@ -41,7 +41,7 @@ Render connection reference: https://render.com/docs/postgresql-creating-connect
 
 ## Shared records
 
-Both pages read and update `/api/shop`. Saves use a revision check so simultaneous pages cannot silently overwrite each other. When a change conflicts or fails, the page shows a reload prompt. Pages check for updates every five seconds while visible, except while an edit dialog or the profile editor is open. The database is authoritative; browser storage is a best-effort cache.
+Admin reads and updates `/api/shop`. Buyer reads `/api/catalog` and submits purchases to `/api/sales`. Saves use a revision check so simultaneous pages cannot silently overwrite each other. When a change conflicts or fails, the page shows a reload prompt. Pages check for updates every five seconds while visible, except while an edit dialog or the profile editor is open. The database is authoritative; browser storage is a best-effort cache.
 
 The state is kept as a single versioned database record. For larger stores, move products and transactions into separate tables with transaction-specific APIs. Reports use the prices and costs saved with each sale, so editing or removing a product does not change recorded amounts. Older records without saved amounts are labeled as estimates. Gross profit excludes operating expenses and taxes.
 
@@ -56,3 +56,11 @@ The state is kept as a single versioned database record. For larger stores, move
 The interface has been rebuilt in plain HTML, CSS and JavaScript. It contains no account forms, demo accounts, Firebase behavior, external fonts, or layered theme overrides.
 
 Run `npm run build` and `npm test`. Backend integration tests check both links, shared reads/writes, invalid updates, concurrent-write conflicts and persistence after restart using a disposable SQLite database. DOM checks also verified independent Admin/Buyer sessions, purchases, stock receiving, historical amounts after product changes/removal, PDF receipts, conflict recovery, settings, and network failures. Live PostgreSQL and visual browser checks have not been performed in this session.
+
+## Selling controls
+
+Admin Inventory can offer or pause each product, change stock and price, and set a maximum quantity per purchase (default 5 for existing products). Paused products stay in Inventory but disappear from the buyer catalog. Purchases cannot exceed either the admin limit or remaining stock. Limits apply to each purchase, not a daily total or an identified customer.
+
+The purchase API calculates prices, costs, and stock deductions on the server and rejects paused products, excess quantities, fractional quantities, and stale updates. Buyer catalog responses omit cost/profit and transaction-history fields. Admin editing APIs remain public as requested; authentication/security is deferred. Separate views alone are not access control.
+
+Starter catalog installation is marked in the database and does not repeat when all products are later removed. Sample sales are never inserted. Admin can mark the sample catalog reviewed after checking its stock and prices.

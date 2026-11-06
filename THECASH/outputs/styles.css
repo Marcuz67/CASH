@@ -1,14 +1,14 @@
 /* C.A.S.H. uses solid surfaces and system fonts. No external font dependencies. */
 :root {
   color-scheme: light;
-  --background: #f3f4f6;
+  --background: #efefec;
   --surface: #ffffff;
   --subtle: #eef1f4;
   --text: #20252b;
   --muted: #59636f;
   --border: #d5dae0;
-  --accent: #294b70;
-  --accent-hover: #203b59;
+  --accent: #304b68;
+  --accent-hover: #233950;
   --positive: #326447;
   --positive-bg: #eaf3ed;
   --negative: #a33f36;
@@ -176,3 +176,22 @@ body[data-mode="buyer"] main { max-width: 1200px; }
 }
 @media (max-width: 400px) { .form-grid { grid-template-columns: 1fr; }.product-grid { grid-template-columns: 1fr; }.stat-value { font-size: 19px; }.buyer-brand { font-size: 18px; } }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+
+/* Restrained store styling: opaque colors, flat panels and clear stock controls. */
+.sidebar { background: #26364a; color: #ffffff; border-right-color: #26364a; }
+.sidebar .wordmark, .sidebar nav button { color: #ffffff; }
+.sidebar .brand-description, .sidebar .nav-heading, .sidebar-footer { color: #c4cedb; }
+.sidebar-footer { border-color: #4c5a6d; }
+.sidebar-footer a { color: #e2e9f3; }
+.sidebar nav button:hover { background: #36495f; }
+.sidebar nav button[aria-current="page"] { background: #40566f; border-color: #64798f; }
+[data-theme="dark"] .sidebar { background: #151d28; border-color: #151d28; }
+.product-card, .panel, .stat { border-radius: 3px; }
+.catalog-placeholder { height: 62px; display: flex; align-items: center; padding: 16px 18px; background: #e2e5e8; color: #3f4955; font-size: 12px; letter-spacing: .5px; text-transform: uppercase; }
+[data-theme="dark"] .catalog-placeholder { background: #343e4b; color: #d4dce6; }
+.purchase-limit { padding-top: 10px; border-top: 1px solid var(--border); color: var(--muted); font-size: 11px; }
+.badge.ok { background: #386548; border-color: #386548; color: #ffffff; }
+.badge.low { background: #896728; border-color: #896728; color: #ffffff; }
+.badge.out { background: #9d4840; border-color: #9d4840; color: #ffffff; }
+.badge.paused { background: #5f6771; border-color: #5f6771; color: #ffffff; }
+#sampleCatalogNotice { background: var(--surface); border-left: 4px solid #896728; color: var(--text); font-size: 12px; }

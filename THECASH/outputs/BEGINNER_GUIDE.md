@@ -34,3 +34,9 @@ Existing database records keep the same structure. Sales retain recorded prices 
 Use a Render Node Web Service with build command `npm ci && npm run build`, start command `npm start`, and `DATABASE_URL` set privately to the PostgreSQL Internal Database URL. See the root README for details.
 
 Run `npm run build` and `npm test` before sharing a change. Both workspaces have no accounts, Admin is intentionally public, and recording a purchase does not collect an online payment.
+
+## Offer items for sale
+
+In Admin, open Inventory and choose Edit. Set Buyer availability and Maximum units per purchase. Use Pause sale to remove an item from the buyer page while retaining inventory. Use Offer for sale to restore it. Receive adds delivered units; it does not change the selling limit. The server checks the limit and current stock for every purchase.
+
+The catalog.js file creates starter products only for an empty, unused shop and validates purchases. Security is deferred: Admin and its editing API are currently public.

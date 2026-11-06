@@ -2,6 +2,7 @@ const http = require('node:http');
 const { readFile } = require('node:fs/promises');
 const path = require('node:path');
 const { openStore, validateState } = require('./database');
+const { initializeCatalog, publicCatalog, recordPurchase } = require('./catalog');
 let store;
 
 const publicDirectory = path.join(__dirname, 'THECASH', 'outputs');
@@ -16,7 +17,7 @@ const files = new Map([
 
 const server = http.createServer(async (request, response) => {
   response.setHeader('X-Content-Type-Options', 'nosniff');
-  if (!['GET', 'HEAD', 'PUT'].includes(request.method)) {
+  if (!['GET', 'HEAD', 'PUT', 'POST'].includes(request.method)) {
     response.writeHead(405, { Allow: 'GET, HEAD' });
     response.end();
     return;
@@ -29,16 +30,18 @@ const server = http.createServer(async (request, response) => {
     response.end();
     return;
   }
-  if (pathname === '/api/shop') {
+  if (['/api/shop', '/api/catalog', '/api/sales'].includes(pathname)) {
     response.setHeader('Content-Type', 'application/json');
     response.setHeader('Cache-Control', 'no-store');
     try {
-      if (request.method === 'GET') {
-        response.end(JSON.stringify(await store.read()));
+      if (request.method === 'GET' && pathname !== '/api/sales') {
+        const data = await store.read();
+        response.end(JSON.stringify(pathname === '/api/catalog' ? publicCatalog(data) : data));
         return;
       }
-      if (request.method !== 'PUT') {
-        response.writeHead(405, { Allow: 'GET, PUT' }); response.end(); return;
+      const purchasing = pathname === '/api/sales';
+      if (pathname === '/api/catalog' || request.method !== (purchasing ? 'POST' : 'PUT')) {
+        response.writeHead(405, { Allow: pathname === '/api/catalog' ? 'GET' : purchasing ? 'POST' : 'GET, PUT' }); response.end(); return;
       }
       // Require JSON so a third-party HTML form cannot submit a store update.
       if (!request.headers['content-type']?.startsWith('application/json')) {
@@ -56,6 +59,21 @@ const server = http.createServer(async (request, response) => {
       let payload;
       try { payload = JSON.parse(Buffer.concat(chunks).toString('utf8')); }
       catch { response.writeHead(400); response.end(JSON.stringify({ error: 'Invalid JSON.' })); return; }
+      if (purchasing) {
+        const current = await store.read();
+        const purchase = recordPurchase(current, payload);
+        if (purchase.error) {
+          response.writeHead(purchase.status); response.end(JSON.stringify({ error: purchase.error })); return;
+        }
+        if (!validateState(purchase.state)) {
+          response.writeHead(400); response.end(JSON.stringify({ error: 'This purchase would exceed the supported stock or amount limits.' })); return;
+        }
+        const revision = await store.save(purchase.state, current.revision);
+        if (revision === null) {
+          response.writeHead(409); response.end(JSON.stringify({ error: 'Stock changed on another page. Review and try again.' })); return;
+        }
+        response.end(JSON.stringify({ revision, receipt: purchase.receipt })); return;
+      }
       if (!payload || !Number.isSafeInteger(payload.revision) || payload.revision < 0 || !validateState(payload.state)) {
         response.writeHead(400); response.end(JSON.stringify({ error: 'Invalid shop data.' })); return;
       }
@@ -71,7 +89,7 @@ const server = http.createServer(async (request, response) => {
     }
     return;
   }
-  if (request.method === 'PUT') {
+  if (request.method === 'PUT' || request.method === 'POST') {
     response.writeHead(405, { Allow: 'GET, HEAD' }); response.end(); return;
   }
   if (pathname === '/health') {
@@ -111,8 +129,9 @@ const server = http.createServer(async (request, response) => {
 });
 
 const port = Number(process.env.PORT || 3000);
-openStore().then(database => {
+openStore().then(async database => {
   store = database;
+  await initializeCatalog(store);
   server.listen(port, '0.0.0.0', () => {
     console.log(`C.A.S.H. listening on port ${server.address().port}`);
   });
