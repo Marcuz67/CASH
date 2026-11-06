@@ -12,6 +12,7 @@ function starterProducts() {
     ['soap', 'Dishwashing liquid - 250 ml', 'Household', 16, 55, 38, 4, 3],
   ].map(([id, name, category, stock, price, cost, threshold, saleLimit]) => ({
     id: `sample_${id}`, name, category, stock, price, cost, threshold, saleLimit, saleEnabled: true, sold: 0,
+    photo: `/assets/products/${id}.png`,
   }));
 }
 
@@ -24,11 +25,18 @@ function emptyStore() {
 async function initializeCatalog(store) {
   for (let attempt = 0; attempt < 3; attempt++) {
     const data = await store.read();
-    if (data.state?.starterCatalogVersion) return;
+    if (data.state?.starterCatalogVersion && data.state?.productPhotosVersion === 1) return;
     const next = structuredClone(data.state || emptyStore());
     // Only seed an empty, unused shop; retain existing products and all recorded sales.
-    if (!next.products.length && !next.activity.length) {
+    if (!next.starterCatalogVersion && !next.products.length && !next.activity.length) {
       next.products = starterProducts(); next.sampleCatalog = true;
+    }
+    if (next.productPhotosVersion !== 1) {
+      const images = new Map(starterProducts().map(product => [product.id, product.photo]));
+      for (const product of next.products) {
+        if (!product.photo && images.has(product.id)) product.photo = images.get(product.id);
+      }
+      next.productPhotosVersion = 1;
     }
     next.starterCatalogVersion = 1;
     if (await store.save(next, data.revision) !== null) return;

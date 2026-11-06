@@ -82,3 +82,7 @@ Google identities and opaque sessions are stored in separate tables in the same 
 A buyer can download their receipts from My purchases. Historical transactions without a buyer ID remain in seller accounting and are not assigned to arbitrary buyer accounts.
 
 Authentication tests cover buyer/seller separation, private purchase ownership, revoked and expired sessions, invalid credentials, nonce replay, cross-site requests, and missing configuration. DOM checks mock the Google credential exchange; a real Google popup and live PostgreSQL still need verification once the client ID and approved seller emails are configured.
+
+## Product photos
+
+The eight starter/demo items use locally bundled generated catalog photos in THECASH/outputs/assets/products. The photos are generic and unbranded; they do not depict a specific supplier's goods. IMAGE_PROMPTS.md in that folder records the built-in imagegen prompts. Existing uploaded photos are preserved. Existing demo data receives missing images once without resetting stock or sales. Seller can replace or remove a photo through Edit product.

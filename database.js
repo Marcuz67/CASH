@@ -89,7 +89,8 @@ function validateState(state) {
     if (product.saleEnabled !== undefined && typeof product.saleEnabled !== 'boolean') return false;
     if (product.saleLimit !== undefined && (!Number.isSafeInteger(product.saleLimit) || product.saleLimit < 1 || product.saleLimit > 1000000)) return false;
     if (product.emoji && (typeof product.emoji !== 'string' || /[<>"'&]/.test(product.emoji))) return false;
-    if (product.photo && (typeof product.photo !== 'string' || !/^data:image\/(png|jpeg|webp);base64,[a-zA-Z0-9+/=]+$/.test(product.photo))) return false;
+    if (product.photo && (typeof product.photo !== 'string' || (!/^data:image\/(png|jpeg|webp);base64,[a-zA-Z0-9+/=]+$/.test(product.photo)
+      && !/^\/assets\/products\/(rice|milk|eggs|bread|water|noodles|coffee|soap)\.png$/.test(product.photo)))) return false;
   }
   for (const sale of state.activity) {
     if (!sale || typeof sale.name !== 'string' || !Number.isSafeInteger(sale.qty) || sale.qty < 1 || !nonnegative(sale.date)) return false;

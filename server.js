@@ -29,6 +29,9 @@ const files = new Map([
   ['/app.js', ['app.js', 'text/javascript; charset=utf-8']],
   ['/styles.css', ['styles.css', 'text/css; charset=utf-8']],
 ]);
+for (const product of ['rice', 'milk', 'eggs', 'bread', 'water', 'noodles', 'coffee', 'soap']) {
+  files.set(`/assets/products/${product}.png`, [`assets/products/${product}.png`, 'image/png']);
+}
 
 const server = http.createServer(async (request, response) => {
   response.setHeader('X-Content-Type-Options', 'nosniff');
@@ -145,7 +148,7 @@ const server = http.createServer(async (request, response) => {
     response.writeHead(200, {
       'Content-Type': asset[1],
       'Content-Length': body.length,
-      'Cache-Control': 'no-cache',
+      'Cache-Control': asset[1] === 'image/png' ? 'public, max-age=86400' : 'no-cache',
     });
     response.end(request.method === 'HEAD' ? undefined : body);
   } catch (error) {

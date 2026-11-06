@@ -61,7 +61,7 @@ test('buyer and admin share durable state and concurrent writes cannot overwrite
       products: [{ id: 'p1', name: 'Milk', category: 'Drinks', price: 20, cost: 10, stock: 5, sold: 0, threshold: 1 }],
       activity: [], weekByDay: [0, 0, 0, 0, 0, 0, 0], weekProfitByDay: [0, 0, 0, 0, 0, 0, 0],
       weekUnits: 0, lifetimeGrossProfit: 0, profile: { owner: 'Owner', store: 'Test shop', location: '' },
-      profitGoals: { redBelow: 2000, goodFrom: 3000 }, starterCatalogVersion: 1,
+      profitGoals: { redBelow: 2000, goodFrom: 3000 }, starterCatalogVersion: 1, productPhotosVersion: 1,
     };
     assert.equal((await save({ state, revision: initial.revision })).status, 200);
     assert.equal((await save(null)).status, 400);
@@ -148,4 +148,40 @@ test('Google account sessions enforce buyer/seller separation and purchase owner
   const cookie = service.buyerCookie;
   assert.equal((await fetch(service.base+'/api/auth/logout',{method:'POST',headers:buyerHeaders,body:'{}'})).status,200);
   assert.equal((await fetch(service.base+'/api/catalog',{headers:{Cookie:cookie}})).status,401);
+});
+
+test('bundled product images are served locally and unknown asset paths are rejected', async (t) => {
+  const service = await boot(':memory:'); t.after(() => service.stop());
+  for (const name of ['rice','milk','eggs','bread','water','noodles','coffee','soap']) {
+    const response = await fetch(`${service.base}/assets/products/${name}.png`);
+    assert.equal(response.status,200); assert.equal(response.headers.get('content-type'),'image/png');
+    assert.equal(response.headers.get('cache-control'),'public, max-age=86400');
+    const bytes = Buffer.from(await response.arrayBuffer());
+    assert.equal(bytes.subarray(0,8).toString('hex'),'89504e470d0a1a0a');
+  }
+  assert.equal((await fetch(service.base+'/assets/products/missing.png')).status,404);
+  assert.equal((await fetch(service.base+'/assets/products/../../database.js')).status,404);
+});
+
+test('photo migration keeps uploaded images, stock, sales, and later photo removals', async () => {
+  const { initializeCatalog } = require('./catalog');
+  const custom = 'data:image/png;base64,AAAA';
+  let current = { revision:8,state:{ starterCatalogVersion:1, products:[
+    {id:'sample_rice',name:'Rice',stock:23,price:99},
+    {id:'sample_milk',name:'Milk',stock:7,photo:custom,saleEnabled:false},
+    {id:'custom-product',name:'My product',stock:2},
+  ],activity:[{id:'old-sale',qty:2}] } };
+  const store={read:async()=>structuredClone(current),save:async(state,revision)=>{
+    if(revision!==current.revision)return null;
+    current={state:structuredClone(state),revision:revision+1};return current.revision;
+  }};
+  await initializeCatalog(store);
+  assert.equal(current.state.products[0].photo,'/assets/products/rice.png');
+  assert.equal(current.state.products[0].stock,23);assert.equal(current.state.products[0].price,99);
+  assert.equal(current.state.products[1].photo,custom);assert.equal(current.state.products[1].saleEnabled,false);
+  assert.equal(current.state.products[2].photo,undefined);assert.equal(current.state.activity.length,1);
+  const revision=current.revision;
+  delete current.state.products[0].photo;
+  await initializeCatalog(store);
+  assert.equal(current.revision,revision);assert.equal(current.state.products[0].photo,undefined);
 });

@@ -308,6 +308,8 @@ function updateSale() {
     return;
   }
   $('saleProductName').textContent = product.name;
+  preview('saleProductPhoto', product.photo || null);
+  $('saleProductPhoto').alt = product.name;
   $('saleAvailability').textContent = `${product.stock} available | ${money(product.price)} each`;
   $('saleQuantity').max = Math.min(product.stock, product.saleLimit);
   $('saleLimitNote').textContent = `Admin limit: ${product.saleLimit} per purchase. You can buy up to ${Math.min(product.stock, product.saleLimit)} right now.`;
@@ -592,7 +594,7 @@ function clearPrivateView() {
   for (const id of ['productCatalog','inventoryTable','overviewSales','stockAlerts','reportTable','rankingsTable','myPurchasesTable','overviewStats','accountingStats','weekChart']) $(id).replaceChildren();
   for (const id of ['purchaseReceiptText','weekSummary','inventorySummary','reportSummary','signedInAccount','saleProductName','saleAvailability','saleLimitNote','saleTotal']) $(id).textContent = '';
   $('settingsForm').reset(); $('productForm').reset();
-  preview('storePhotoPreview', null); preview('productPhotoPreview', null);
+  preview('storePhotoPreview', null); preview('productPhotoPreview', null); preview('saleProductPhoto', null);
 }
 async function loadGoogleClient() {
   if (window.google?.accounts?.id) return;
@@ -675,13 +677,22 @@ function demoStoreDefaults() {
     ['noodles','Instant noodles','Pantry',36,18,12,8,6],
     ['coffee','Coffee sachet','Pantry',48,12,8,10,10],
     ['soap','Dishwashing liquid - 250 ml','Household',16,55,38,4,3],
-  ].map(([id,name,category,stock,price,cost,threshold,saleLimit]) => ({id:`demo_${id}`,name,category,stock,price,cost,threshold,saleLimit,saleEnabled:true,sold:0}));
+  ].map(([id,name,category,stock,price,cost,threshold,saleLimit]) => ({id:`demo_${id}`,name,category,stock,price,cost,threshold,saleLimit,saleEnabled:true,sold:0,photo:`/assets/products/${id}.png`}));
+  data.productPhotosVersion = 1;
   return { version:1, revision:0, state:data };
 }
 function readDemoStore() {
   try {
     const saved = JSON.parse(localStorage.getItem(DEMO_KEY) || 'null');
     if (saved?.version === 1 && Number.isSafeInteger(saved.revision) && Array.isArray(saved.state?.products) && Array.isArray(saved.state?.activity)) {
+      if (saved.state.productPhotosVersion !== 1) {
+        const images = new Map(demoStoreDefaults().state.products.map(product => [product.id, product.photo]));
+        for (const product of saved.state.products) {
+          if (!product.photo && images.has(product.id)) product.photo = images.get(product.id);
+        }
+        saved.state.productPhotosVersion = 1; saved.revision++;
+        return writeDemoStore(saved);
+      }
       demoMemory = saved; return structuredClone(saved);
     }
   } catch {}

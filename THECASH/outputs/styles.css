@@ -205,3 +205,8 @@ body[data-mode="buyer"] main { max-width: 1200px; }
 
 .demo-entry { width: 100%; margin-bottom: 12px; }
 .demo-notice { background: var(--surface); border-left: 4px solid var(--accent); font-size: 12px; }
+
+/* Keep the complete product visible, including tall bottles and cartons. */
+.catalog-photo { height: 190px; object-fit: contain; padding: 10px; background: #f3f1ee; }
+.sale-product-photo { width: 100%; height: 170px; object-fit: contain; background: #f3f1ee; border: 1px solid var(--border); border-radius: 3px; padding: 8px; }
+@media(max-width:760px) { .catalog-photo { height: 160px; } }
