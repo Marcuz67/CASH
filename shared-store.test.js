@@ -186,13 +186,13 @@ test('photo migration keeps uploaded images, stock, sales, and later photo remov
   assert.equal(current.revision,revision);assert.equal(current.state.products[0].photo,undefined);
 });
 
-test('Buyer guest access and Admin login serve distinct HTML pages without mixed options', async (t) => {
+test('Buyer login and Admin login serve distinct HTML pages without mixed options', async (t) => {
   const service = await boot(':memory:'); t.after(() => service.stop());
   const home = await fetch(service.base+'/').then(response=>response.text());
   const buyer = await fetch(service.base+'/buyer').then(response=>response.text());
   const admin = await fetch(service.base+'/admin').then(response=>response.text());
   assert.notEqual(buyer,admin);
-  assert.match(buyer,/<title>Buyer guest access \| C\.A\.S\.H\.<\/title>/);
+  assert.match(buyer,/<title>Buyer login \| C\.A\.S\.H\.<\/title>/);
   assert.match(admin,/<title>Admin login \| C\.A\.S\.H\.<\/title>/);
   for (const html of [buyer,admin]) {
     const login=html.slice(html.indexOf('<section id="signInScreen"'),html.indexOf('<div id="workspace"'));

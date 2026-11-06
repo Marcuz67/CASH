@@ -6,6 +6,9 @@ const GOOGLE_SIGN_IN_AVAILABLE = false;
 const DEMO_KEY = 'cash-demo-store-v1';
 let demoMode = false;
 let guestMode = false;
+let buyerAccountMode = false;
+let buyerRegistrationMode = false;
+let buyerAuthPending = false;
 let demoMemory = null;
 let demoTabOnly = false;
 const route = location.pathname.replace(/\/$/, '').slice(1).replace(/\.html$/, '');
@@ -71,9 +74,10 @@ function setBusy(value) {
   }
   syncStatus(value ? 'Saving...' : 'Connected to shared store');
 }
+function shopperHeaders() { return guestMode ? {'X-Cash-Guest':'1'} : buyerAccountMode ? {'X-Cash-Buyer':'1'} : {}; }
 async function readStore() {
   if (demoMode) return readDemoStore();
-  const response = await fetch(mode === 'buyer' ? '/api/catalog' : '/api/shop', { cache: 'no-store', headers: guestMode ? {'X-Cash-Guest':'1'} : {} });
+  const response = await fetch(mode === 'buyer' ? '/api/catalog' : '/api/shop', { cache: 'no-store', headers: shopperHeaders() });
   if (!response.ok) {
     const error = new Error([401,403].includes(response.status) ? 'Please sign in with the correct Google account.' : 'Could not connect to the store database.');
     error.status = response.status; throw error;
@@ -137,7 +141,7 @@ async function start() {
   document.body.dataset.mode = mode;
   $('welcome').hidden = true; $('signInScreen').hidden = true; $('workspace').hidden = false;
   $('signedInAccount').textContent = signedInUser.email || signedInUser.username || signedInUser.name;
-  $('signOut').textContent = guestMode ? 'Back to guest access' : demoMode ? 'Exit demo' : 'Sign out';
+  $('signOut').textContent = guestMode ? 'Back to Buyer access' : demoMode ? 'Exit demo' : 'Sign out';
   if ($('guestModeNotice')) $('guestModeNotice').hidden = !guestMode;
   $('demoModeNotice').hidden = !demoMode;
   document.querySelector('.sidebar-footer span').textContent = demoMode ? 'Demo store in this browser' : 'Shared store database';
@@ -580,9 +584,9 @@ startWithAuth();
 async function loadMyPurchases() {
   if (mode !== 'buyer' || !signedInUser) return;
   $('purchaseHistoryPanel').hidden = false;
-  if ($('purchaseHistoryDescription')) $('purchaseHistoryDescription').textContent = guestMode ? 'Receipts linked to this browser. Clearing browser data removes access.' : demoMode ? 'Sample receipts saved in this browser' : 'Receipts from your Google account, across devices';
+  if ($('purchaseHistoryDescription')) $('purchaseHistoryDescription').textContent = guestMode ? 'Receipts linked to this browser. Clearing browser data removes access.' : buyerAccountMode ? 'Your account receipts, available on any device after login.' : demoMode ? 'Sample receipts saved in this browser' : 'Receipts from your Google account, across devices';
   try {
-    const response = demoMode ? { ok: true, json: async () => ({ purchases: readDemoStore().state.activity.filter(sale => sale.buyerId === 'demo-buyer') }) } : await fetch('/api/my-purchases', { cache: 'no-store', headers:guestMode ? {'X-Cash-Guest':'1'} : {} });
+    const response = demoMode ? { ok: true, json: async () => ({ purchases: readDemoStore().state.activity.filter(sale => sale.buyerId === 'demo-buyer') }) } : await fetch('/api/my-purchases', { cache: 'no-store', headers:shopperHeaders() });
     if (!response.ok) throw new Error('Could not load your purchase history.');
     myPurchases = (await response.json()).purchases.sort((a,b) => b.date - a.date);
     $('myPurchasesTable').innerHTML = table(['Date','Product','Quantity','Total','Receipt'], myPurchases.map(receipt =>
@@ -600,7 +604,7 @@ function clearPrivateView() {
   for (const id of ['productCatalog','inventoryTable','overviewSales','stockAlerts','reportTable','rankingsTable','myPurchasesTable','overviewStats','accountingStats','weekChart']) $(id).replaceChildren();
   for (const id of ['purchaseReceiptText','weekSummary','inventorySummary','reportSummary','signedInAccount','saleProductName','saleAvailability','saleLimitNote','saleTotal']) $(id).textContent = '';
   $('settingsForm').reset(); $('productForm').reset();
-  $('adminPasswordForm')?.reset();
+  $('adminPasswordForm')?.reset(); $('buyerPasswordForm')?.reset();
   preview('storePhotoPreview', null); preview('productPhotoPreview', null); preview('saleProductPhoto', null);
 }
 async function loadGoogleClient() {
@@ -616,7 +620,7 @@ async function loadGoogleClient() {
 }
 async function startWithAuth({skipGuestResume=false} = {}) {
   if (!['admin','buyer'].includes(mode)) return;
-  guestMode = false;
+  guestMode = false; buyerAccountMode = false;
   clearPrivateView();
   $('signInTitle').textContent = mode === 'admin' ? 'Admin login' : 'Buyer login';
   $('signInDescription').textContent = mode === 'admin' ? 'Use an approved Google account to manage inventory and reports.' : 'Use your Google account to buy products and keep your receipts.';
@@ -624,22 +628,12 @@ async function startWithAuth({skipGuestResume=false} = {}) {
   $('googleSignInButton').replaceChildren(); $('retrySignIn').hidden = true;
   $('enterDemo').hidden = false;
   $('googleSignInButton').hidden = !GOOGLE_SIGN_IN_AVAILABLE;
-  if (mode === 'buyer' && !GOOGLE_SIGN_IN_AVAILABLE) {
-    guestMode = false; demoMode = false;
-    $('signInTitle').textContent = 'Shop as a guest';
-    $('signInDescription').textContent = 'Browse products and record purchases without creating an account.';
-    $('enterDemo').textContent = 'Continue as guest';
-    $('signInStatus').textContent = 'Google Play not available yet';
-    if (!skipGuestResume) {
-      try {
-        const response = await fetch('/api/auth/guest/session',{cache:'no-store'});
-        if (response.ok) {
-          const result = await response.json();
-          if (result.user) { guestMode=true; signedInUser=result.user; await start(); return; }
-        }
-      } catch {}
-    }
-    return;
+  if (mode === 'buyer') {
+    demoMode = false;
+    $('enterDemo').textContent = 'Continue as guest'; $('enterDemo').disabled = true;
+    const opened = await loadBuyerAccess();
+    $('enterDemo').disabled = false;
+    if (opened) return;
   }
   if (mode === 'admin') {
     $('enterDemo').disabled = true;
@@ -648,9 +642,9 @@ async function startWithAuth({skipGuestResume=false} = {}) {
     if (opened) return;
   }
   if (!GOOGLE_SIGN_IN_AVAILABLE) {
-    if (mode !== 'admin' || !adminSetupMode) {
-      $('signInTitle').textContent = mode === 'admin' ? 'Admin login' : 'Buyer login';
-      $('signInDescription').textContent = mode === 'admin' ? 'Sign in to manage your store.' : 'Browse products and try a sample purchase.';
+    if (mode === 'admin' && !adminSetupMode) {
+      $('signInTitle').textContent = 'Admin login';
+      $('signInDescription').textContent = 'Sign in to manage your store.';
     }
     $('signInStatus').textContent = 'Google Play not available yet';
     return;
@@ -673,7 +667,7 @@ async function startWithAuth({skipGuestResume=false} = {}) {
   }
 }
 async function googleCredential(result) {
-  if (loginPending || adminAuthPending) return;
+  if (loginPending || adminAuthPending || buyerAuthPending) return;
   loginPending = true; $('googleSignInButton').classList.add('busy'); $('signInStatus').textContent = 'Verifying your Google account...';
   try {
     const response = await fetch('/api/auth/google', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ credential: result.credential, mode }) });
@@ -688,6 +682,14 @@ $('signOut').addEventListener('click', async () => {
   if (saving) return toast('Please wait for the current save to finish.');
   if (settingsDirty && !confirm('Sign out without saving your store settings?')) return;
   if (guestMode) { guestMode = false; await startWithAuth({skipGuestResume:true}); return; }
+  if (buyerAccountMode) {
+    try {
+      const response=await fetch('/api/auth/buyer/logout',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+      if(!response.ok)throw new Error();
+      buyerAccountMode=false; await startWithAuth();
+    } catch { toast('Could not log out. Please check your connection and try again.'); }
+    return;
+  }
   if (demoMode) { demoMode = false; await startWithAuth(); return; }
   try {
     const response = await fetch('/api/auth/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
@@ -741,7 +743,7 @@ function writeDemoStore(data) {
   return structuredClone(snapshot);
 }
 async function purchaseRequest(payload) {
-  if (!demoMode) return fetch('/api/sales', {method:'POST',headers:{'Content-Type':'application/json',...(guestMode ? {'X-Cash-Guest':'1'} : {})},body:JSON.stringify(payload)});
+  if (!demoMode) return fetch('/api/sales', {method:'POST',headers:{'Content-Type':'application/json',...shopperHeaders()},body:JSON.stringify(payload)});
   const current = readDemoStore();
   let error;
   if (current.revision !== payload.revision) return {ok:false,status:409,json:async()=>({error:'Demo stock changed in another tab.'})};
@@ -759,7 +761,7 @@ async function purchaseRequest(payload) {
   return {ok:true,status:200,json:async()=>({receipt,revision:saved.revision})};
 }
 $('enterDemo').addEventListener('click', async () => {
-  if (adminAuthPending || loginPending) return;
+  if (adminAuthPending || loginPending || buyerAuthPending) return;
   if (mode === 'buyer') { await enterGuestMode(); return; }
   guestMode = false; demoMode = true;
   signedInUser = {sub:mode === 'admin' ? 'demo-admin' : 'demo-buyer',email:mode === 'admin' ? 'Seller demo' : 'Buyer demo',name:mode === 'admin' ? 'Demo seller' : 'Demo buyer',role:mode};
@@ -843,7 +845,53 @@ async function enterGuestMode() {
     const response=await fetch('/api/auth/guest',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
     const result=await response.json();
     if(!response.ok)throw new Error(result.error || 'Guest access could not connect. Please try again.');
-    guestMode=true; demoMode=false; signedInUser=result.user; uncertainSave=false; await start();
+    $('buyerPasswordForm')?.reset();
+    guestMode=true; buyerAccountMode=false; demoMode=false; signedInUser=result.user; uncertainSave=false; await start();
   } catch(error) { $('signInStatus').textContent=error.message; }
   finally { $('enterDemo').disabled=false; }
 }
+
+
+function setBuyerRegistrationMode(value) {
+  if (!$('buyerPasswordForm')) return;
+  buyerRegistrationMode=value;
+  $('buyerNameField').hidden=!value; $('buyerDisplayName').required=value;
+  $('buyerConfirmField').hidden=!value; $('buyerConfirmPassword').required=value;
+  $('buyerRegistrationHint').hidden=!value;
+  $('buyerPassword').minLength=value?12:1;
+  $('buyerPassword').autocomplete=value?'new-password':'current-password';
+  $('buyerAuthSubmit').textContent=value?'Create account':'Log in';
+  $('toggleBuyerRegistration').textContent=value?'Already have an account? Log in':"Don't have an account? Create an account";
+  $('signInTitle').textContent=value?'Create Buyer account':'Buyer login';
+  $('signInDescription').textContent=value?'Set up your account to save purchases and receipts.':'Sign in to shop and keep your purchase receipts.';
+  $('buyerAuthStatus').hidden=true;
+}
+async function loadBuyerAccess() {
+  if (!$('buyerPasswordForm')) return false;
+  $('buyerPasswordForm').hidden=false; $('buyerCredentials').disabled=true; $('toggleBuyerRegistration').disabled=true;
+  setBuyerRegistrationMode(false);
+  try {
+    const response=await fetch('/api/auth/buyer/status',{cache:'no-store'});
+    if(!response.ok)throw new Error('Could not check your account. Reload this page to try again.');
+    const result=await response.json();
+    if(result.user){signedInUser=result.user;buyerAccountMode=true;guestMode=false;demoMode=false;await start();return true;}
+  } catch(error){$('buyerAuthStatus').textContent=error.message;$('buyerAuthStatus').hidden=false;}
+  finally{$('buyerCredentials').disabled=false;$('toggleBuyerRegistration').disabled=false;}
+  return false;
+}
+$('toggleBuyerRegistration')?.addEventListener('click',()=>{if(!buyerAuthPending)setBuyerRegistrationMode(!buyerRegistrationMode)});
+$('buyerPasswordForm')?.addEventListener('submit',async(event)=>{
+  event.preventDefault(); if(buyerAuthPending)return;
+  const payload={username:$('buyerUsername').value,password:$('buyerPassword').value};
+  if(buyerRegistrationMode){payload.name=$('buyerDisplayName').value;payload.confirmPassword=$('buyerConfirmPassword').value;}
+  buyerAuthPending=true; $('buyerCredentials').disabled=true; $('toggleBuyerRegistration').disabled=true; $('enterDemo').disabled=true; $('buyerAuthStatus').hidden=true;
+  try {
+    const response=await fetch(buyerRegistrationMode?'/api/auth/buyer/register':'/api/auth/buyer/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    const result=await response.json();if(!response.ok)throw new Error(result.error || 'Could not log in. Please try again.');
+    $('buyerPasswordForm').reset(); signedInUser=result.user; buyerAccountMode=true; guestMode=false;demoMode=false;uncertainSave=false;await start();
+  } catch(error){
+    $('buyerPassword').value='';$('buyerConfirmPassword').value='';$('buyerAuthStatus').textContent=error.message;$('buyerAuthStatus').hidden=false;
+  } finally {
+    buyerAuthPending=false;$('buyerCredentials').disabled=false;$('toggleBuyerRegistration').disabled=false;$('enterDemo').disabled=false;
+  }
+});

@@ -11,8 +11,15 @@ async function openStore() {
     await pool.query('CREATE TABLE IF NOT EXISTS cash_sessions (token_hash TEXT PRIMARY KEY, identity TEXT NOT NULL, expires_at BIGINT NOT NULL)');
     await pool.query('CREATE TABLE IF NOT EXISTS cash_local_admin (id INTEGER PRIMARY KEY CHECK (id = 1), username TEXT UNIQUE NOT NULL, display_name TEXT NOT NULL, password_hash TEXT NOT NULL, version INTEGER NOT NULL DEFAULT 1, created_at BIGINT NOT NULL)');
     await pool.query('CREATE TABLE IF NOT EXISTS cash_login_limits (attempt_key TEXT PRIMARY KEY, attempts INTEGER NOT NULL, expires_at BIGINT NOT NULL)');
+    await pool.query('CREATE TABLE IF NOT EXISTS cash_buyers (id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, display_name TEXT NOT NULL, password_hash TEXT NOT NULL, version INTEGER NOT NULL DEFAULT 1, created_at BIGINT NOT NULL)');
     return {
       kind: 'postgresql',
+      async getBuyerById(id) { return (await pool.query('SELECT * FROM cash_buyers WHERE id=$1',[id])).rows[0] || null; },
+      async getBuyerByUsername(username) { return (await pool.query('SELECT * FROM cash_buyers WHERE username=$1',[username])).rows[0] || null; },
+      async createBuyer(account) {
+        const result=await pool.query('INSERT INTO cash_buyers (id,username,display_name,password_hash,created_at) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (username) DO NOTHING RETURNING id',[account.id,account.username,account.name,account.passwordHash,Date.now()]);
+        return result.rows.length === 1;
+      },
       async getLocalAdmin() { return (await pool.query('SELECT * FROM cash_local_admin WHERE id = 1')).rows[0] || null; },
       async createLocalAdmin(account) {
         const result = await pool.query('INSERT INTO cash_local_admin (id,username,display_name,password_hash,created_at) VALUES (1,$1,$2,$3,$4) ON CONFLICT (id) DO NOTHING RETURNING id', [account.username,account.name,account.passwordHash,Date.now()]);
@@ -61,8 +68,14 @@ async function openStore() {
   db.exec('CREATE TABLE IF NOT EXISTS cash_shop (id INTEGER PRIMARY KEY, state TEXT, revision INTEGER NOT NULL DEFAULT 0); INSERT OR IGNORE INTO cash_shop (id) VALUES (1)');
   db.exec('CREATE TABLE IF NOT EXISTS cash_google_accounts (google_sub TEXT PRIMARY KEY, email TEXT NOT NULL, display_name TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS cash_sessions (token_hash TEXT PRIMARY KEY, identity TEXT NOT NULL, expires_at INTEGER NOT NULL)');
   db.exec('CREATE TABLE IF NOT EXISTS cash_local_admin (id INTEGER PRIMARY KEY CHECK (id = 1), username TEXT UNIQUE NOT NULL, display_name TEXT NOT NULL, password_hash TEXT NOT NULL, version INTEGER NOT NULL DEFAULT 1, created_at INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS cash_login_limits (attempt_key TEXT PRIMARY KEY, attempts INTEGER NOT NULL, expires_at INTEGER NOT NULL)');
+  db.exec('CREATE TABLE IF NOT EXISTS cash_buyers (id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, display_name TEXT NOT NULL, password_hash TEXT NOT NULL, version INTEGER NOT NULL DEFAULT 1, created_at INTEGER NOT NULL)');
   return {
     kind: 'sqlite',
+    async getBuyerById(id) { return db.prepare('SELECT * FROM cash_buyers WHERE id=?').get(id) || null; },
+    async getBuyerByUsername(username) { return db.prepare('SELECT * FROM cash_buyers WHERE username=?').get(username) || null; },
+    async createBuyer(account) {
+      return Boolean(db.prepare('INSERT INTO cash_buyers (id,username,display_name,password_hash,created_at) VALUES (?,?,?,?,?) ON CONFLICT (username) DO NOTHING RETURNING id').get(account.id,account.username,account.name,account.passwordHash,Date.now()));
+    },
     async getLocalAdmin() { return db.prepare('SELECT * FROM cash_local_admin WHERE id = 1').get() || null; },
     async createLocalAdmin(account) {
       return Boolean(db.prepare('INSERT INTO cash_local_admin (id,username,display_name,password_hash,created_at) VALUES (1,?,?,?,?) ON CONFLICT (id) DO NOTHING RETURNING id').get(account.username,account.name,account.passwordHash,Date.now()));

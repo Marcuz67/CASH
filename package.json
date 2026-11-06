@@ -4,8 +4,8 @@
   "private": true,
   "scripts": {
     "start": "node --env-file-if-exists=.env server.js",
-    "build": "node --check server.js && node --check database.js && node --check catalog.js && node --check auth.js && node --check local-admin.js && node --check THECASH/outputs/app.js",
-    "test": "node --test shared-store.test.js auth.test.js local-admin.test.js"
+    "build": "node --check server.js && node --check database.js && node --check catalog.js && node --check auth.js && node --check local-admin.js && node --check local-buyer.js && node --check THECASH/outputs/app.js",
+    "test": "node --test shared-store.test.js auth.test.js local-admin.test.js local-buyer.test.js"
   },
   "engines": {
     "node": "24.x"

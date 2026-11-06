@@ -28,6 +28,6 @@ Local and Render databases are separate. An account created on your computer doe
 
 Render sessions use Secure, HttpOnly cookies. The password is stored as a salted scrypt hash; it is not stored in plaintext or browser storage. Login limits and the Admin account are stored in PostgreSQL and survive deploys. The single-account insert prevents two concurrent setup requests from creating different administrators.
 
-Buyer uses account-free Guest access to the shared catalog and stock, with receipts tied to a browser cookie. The optional Admin demo is a separate browser-only sample store; it does not authenticate to the real database or create a real account.
+Buyer has a separate username/password login and public account registration below its login form. These accounts cannot become Admin. Optional Guest access keeps receipts tied to a browser cookie. The optional Admin demo is a separate browser-only sample store; it does not authenticate to the real database or create a real account.
 
 The current UI does not include password reset or additional local Admin account creation. Do not share your password. Google authentication remains prepared for later activation.

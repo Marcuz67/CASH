@@ -11,6 +11,7 @@ function createAuth({ store, clientId = process.env.GOOGLE_CLIENT_ID || '',
   const sessionCookie = secure ? '__Host-cash_session' : 'cash_session';
   const challengeCookie = secure ? '__Host-cash_login' : 'cash_login';
   const guestCookie = secure ? '__Host-cash_guest' : 'cash_guest';
+  const buyerCookie = secure ? '__Host-cash_buyer' : 'cash_buyer';
   const google = new OAuth2Client(clientId);
   const verify = verifyToken || (async credential => (await google.verifyIdToken({ idToken: credential, audience: clientId })).getPayload());
   const role = user => user.sellerEligible === true && emails.has(user.email.toLowerCase()) ? 'admin' : 'buyer';
@@ -68,14 +69,47 @@ function createAuth({ store, clientId = process.env.GOOGLE_CLIENT_ID || '',
   async function requireShopper(request) {
     // Buyer guest access is separate from a signed-in Admin in the same browser.
     const guest = await currentGuest(request);
+    if (request.headers['x-cash-buyer'] === '1') {
+      const buyer=await currentBuyer(request);
+      if (!buyer) throw failure(401,'Sign in to your Buyer account to continue.');
+      return buyer;
+    }
     if (request.headers['x-cash-guest'] === '1') {
       if (!guest) throw failure(401,'Continue as guest to access the store.');
       return guest;
     }
     const user = await currentUser(request);
     if (user) return user;
+    const buyer=await currentBuyer(request);
+    if (buyer) return buyer;
     if (guest) return guest;
     throw failure(401,'Continue as guest or sign in to access the store.');
+  }
+  async function currentBuyer(request) {
+    const token=cookies(request)[buyerCookie];
+    if (!token || !/^[a-f0-9]{64}$/.test(token)) return null;
+    const session=await store.getSession(hash(token));
+    if (!session || session.expires <= now() || session.identity.purpose !== 'buyer-account') return null;
+    const identity=session.identity.user;
+    const account=await store.getBuyerById(identity.id);
+    if (!account || identity.sub !== `local-buyer:${account.id}` || identity.version !== account.version) return null;
+    return {sub:identity.sub,id:account.id,provider:'local-buyer',username:account.username,name:account.display_name,version:account.version,role:'buyer'};
+  }
+  async function issueBuyerSession(request,response,account) {
+    const old=cookies(request)[buyerCookie];
+    if (old && /^[a-f0-9]{64}$/.test(old)) await store.deleteSession(hash(old));
+    const user={id:account.id,sub:`local-buyer:${account.id}`,provider:'local-buyer',username:account.username,name:account.display_name,version:account.version,role:'buyer'};
+    const token=randomBytes(32).toString('hex');
+    await store.createSession(hash(token),{purpose:'buyer-account',user},now()+8*60*60*1000);
+    setCookie(response,buyerCookie,token,8*60*60);
+    return {user:publicUser(user)};
+  }
+  async function buyerLogout(request,response) {
+    sameOrigin(request);
+    const token=cookies(request)[buyerCookie];
+    if (token && /^[a-f0-9]{64}$/.test(token)) await store.deleteSession(hash(token));
+    setCookie(response,buyerCookie,'',0);
+    return {signedOut:true};
   }
   async function guestSession(request) { return {user:await currentGuest(request)}; }
   async function enterGuest(request,response) {
@@ -149,7 +183,7 @@ function createAuth({ store, clientId = process.env.GOOGLE_CLIENT_ID || '',
     setCookie(response, sessionCookie, '', 0); setCookie(response, challengeCookie, '', 0);
     return { signedOut: true };
   }
-  return { session, login, logout, requireUser, sameOrigin, currentUser, issueSession, guestSession, enterGuest, requireShopper };
+  return { session, login, logout, requireUser, sameOrigin, currentUser, issueSession, guestSession, enterGuest, requireShopper, currentBuyer, issueBuyerSession, buyerLogout };
 }
 
 module.exports = { createAuth };

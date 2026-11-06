@@ -246,3 +246,8 @@ body[data-mode="buyer"] main { max-width: 1200px; }
 .access-divider::before, .access-divider::after { content: ""; flex: 1; height: 1px; background: var(--border); }
 
 .guest-notice { background: var(--surface); border-left: 4px solid #386548; font-size: 12px; }
+
+.buyer-auth-form fieldset { display: grid; gap: 16px; padding: 0; border: 0; min-width: 0; }
+.buyer-auth-form .primary { width: 100%; min-height: 44px; }
+.buyer-auth-form [role="alert"] { margin: 12px 0 0; color: var(--negative); }
+.buyer-register-link { margin-top: 12px; padding-left: 0; text-align: left; font-size: 12px; }

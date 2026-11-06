@@ -33,24 +33,26 @@ Existing database records keep the same structure. Sales retain recorded prices 
 
 Use a Render Node Web Service with build command `npm ci && npm run build`, start command `npm start`, and `DATABASE_URL` set privately to the PostgreSQL Internal Database URL. See the root README for details.
 
-Run `npm run build` and `npm test` before sharing a change. Both workspaces require Google sign-in. Seller/Admin needs an approved email, and recording a purchase does not collect an online payment.
+Run `npm run build` and `npm test` before sharing a change. Buyer and Admin have separate username/password forms. Recording a purchase does not collect an online payment.
 
 ## Offer items for sale
 
 In Admin, open Inventory and choose Edit. Set Buyer availability and Maximum units per purchase. Use Pause sale to remove an item from the buyer page while retaining inventory. Use Offer for sale to restore it. Receive adds delivered units; it does not change the selling limit. The server checks the limit and current stock for every purchase.
 
-The catalog.js file creates starter products only for an empty, unused shop and validates purchases. The auth.js module protects the editing API and verifies Google identities. Setup is described in GOOGLE_SIGN_IN_SETUP.md at the project root.
+The catalog.js file creates starter products only for an empty, unused shop and validates purchases. The auth.js module protects editing and receipt APIs. Local password login is handled by local-admin.js and local-buyer.js. Future Google setup is described in GOOGLE_SIGN_IN_SETUP.md at the project root.
 
-Before running, copy .env.example to .env and configure your Google client ID and seller email. The default local origin is http://localhost:3000. Use GOOGLE_CLIENT_ID, ADMIN_EMAILS, and APP_ORIGIN in Render.
+The default local origin is http://localhost:3000. Set DATABASE_URL and APP_ORIGIN in Render, and ADMIN_SETUP_TOKEN for initial Admin setup. Google settings are optional while that integration is paused.
 
 ## Demo preview
 
-Google sign-in is currently paused. Buyer uses Continue as guest with the shared store inventory. The optional Admin demo uses separate browser data and does not call live store APIs. Use Reset demo to restore its sample items. Google setup is only required when the Google integration is enabled later.
+Google sign-in is currently paused. Buyer accounts and optional Continue as guest use the shared store inventory. The optional Admin demo uses separate browser data and does not call live store APIs. Use Reset demo to restore its sample items. Google setup is only required when the Google integration is enabled later.
 
 ## Admin username/password
 
 The separate Admin page now has a real login form and first-time account setup. See ADMIN_ACCOUNT_SETUP.md for localhost and Render instructions. The local-admin.js module hashes/verifies passwords and checks owner-only setup; database.js stores the account and attempt limits. Google is not required for this Admin login.
 
-## Buyer Guest access
+## Buyer accounts and Guest access
 
-Buyer now uses Continue as guest to access shared store inventory. Guest identity and receipts use a separate HttpOnly browser cookie; no account is created. Admin credentials are still required for inventory editing and reports. The optional Admin demo stays browser-only and does not affect the shared store.
+Buyer opens with a username/password login and a Create an account button below it. Registration saves a Buyer account with a salted password hash in PostgreSQL on Render or SQLite locally. Account receipts follow the account across devices. Local accounts and Render accounts are separate. Password reset is not included yet.
+
+Continue as guest remains available. Guest identity and receipts use a separate HttpOnly browser cookie; no account is created. Guest purchases are not automatically transferred to registered accounts. Admin credentials are still required for inventory editing and reports. The optional Admin demo stays browser-only and does not affect the shared store.

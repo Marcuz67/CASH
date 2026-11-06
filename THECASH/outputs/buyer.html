@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#294b70">
-  <title>Buyer guest access | C.A.S.H.</title>
+  <title>Buyer login | C.A.S.H.</title>
   <link rel="stylesheet" href="/styles.css">
   <script src="/app.js" defer></script>
 </head>
@@ -17,11 +17,24 @@
       <div class="access-card">
         <div class="access-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 8h12l1 13H5L6 8Z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg></div>
         <p class="access-label">Buyer access</p>
-        <h1 id="signInTitle">Shop as a guest</h1>
-        <p id="signInDescription" class="access-description">Browse products and record purchases without creating an account.</p>
+        <h1 id="signInTitle">Buyer login</h1>
+        <p id="signInDescription" class="access-description">Sign in to shop and keep your purchase receipts.</p>
+        <form id="buyerPasswordForm" class="buyer-auth-form" hidden>
+          <fieldset id="buyerCredentials">
+            <div id="buyerNameField" hidden><label for="buyerDisplayName">Your name<input id="buyerDisplayName" name="name" autocomplete="name" maxlength="80"></label></div>
+            <label for="buyerUsername">Username<input id="buyerUsername" name="username" autocomplete="username" minlength="3" maxlength="40" pattern="[A-Za-z0-9_.-]{3,40}" required></label>
+            <label for="buyerPassword">Password<input id="buyerPassword" name="password" type="password" autocomplete="current-password" maxlength="128" required></label>
+            <div id="buyerConfirmField" hidden><label for="buyerConfirmPassword">Confirm password<input id="buyerConfirmPassword" name="confirmPassword" type="password" autocomplete="new-password" maxlength="128"></label></div>
+            <p id="buyerRegistrationHint" class="small-note" hidden>Choose a password of at least 12 characters. Your account and receipts are saved to the store database.</p>
+            <button id="buyerAuthSubmit" class="primary" type="submit">Log in</button>
+          </fieldset>
+          <p id="buyerAuthStatus" class="small-note" role="alert" hidden></p>
+        </form>
+        <button id="toggleBuyerRegistration" class="quiet buyer-register-link" type="button">Don't have an account? Create an account</button>
+        <div class="access-divider" aria-hidden="true">or</div>
         <div id="googleSignInButton" class="google-sign-in" hidden></div>
         <p id="signInStatus" class="access-status" role="status">Google Play not available yet</p>
-        <button id="enterDemo" class="primary demo-entry" type="button">Continue as guest</button>
+        <button id="enterDemo" class="secondary demo-entry" type="button">Continue as guest</button>
         <button id="retrySignIn" class="secondary" type="button" hidden>Reload sign-in</button>
         <p class="access-demo-note">No account or password needed.<br>Your receipts are linked to this browser.</p>
         <a class="access-back" href="/">&larr; Back to home</a>

@@ -5,9 +5,11 @@ const { openStore, validateState } = require('./database');
 const { initializeCatalog, publicCatalog, recordPurchase } = require('./catalog');
 const { createAuth } = require('./auth');
 const { createLocalAdmin } = require('./local-admin');
+const { createLocalBuyer } = require('./local-buyer');
 let store;
 let auth;
 let localAdmin;
+let localBuyer;
 
 async function jsonBody(request, limit = 8 * 1024 * 1024) {
   if (!request.headers['content-type']?.startsWith('application/json')) throw Object.assign(new Error('Use application/json.'), { status: 415 });
@@ -59,7 +61,11 @@ const server = http.createServer(async (request, response) => {
     response.setHeader('Cache-Control', 'no-store');
     try {
       let result;
-      if (pathname === '/api/auth/guest/session' && request.method === 'GET') result = await auth.guestSession(request);
+      if (pathname === '/api/auth/buyer/status' && request.method === 'GET') result = await localBuyer.status(request);
+      else if (pathname === '/api/auth/buyer/register' && request.method === 'POST') result = await localBuyer.register(request,response,await jsonBody(request,20000));
+      else if (pathname === '/api/auth/buyer/login' && request.method === 'POST') result = await localBuyer.login(request,response,await jsonBody(request,20000));
+      else if (pathname === '/api/auth/buyer/logout' && request.method === 'POST') result = await auth.buyerLogout(request,response);
+      else if (pathname === '/api/auth/guest/session' && request.method === 'GET') result = await auth.guestSession(request);
       else if (pathname === '/api/auth/guest' && request.method === 'POST') { await jsonBody(request,2000); result = await auth.enterGuest(request,response); }
       else if (pathname === '/api/auth/admin/status' && request.method === 'GET') result = await localAdmin.status(request);
       else if (pathname === '/api/auth/admin/setup' && request.method === 'POST') result = await localAdmin.setup(request, response, await jsonBody(request, 20000));
@@ -173,6 +179,7 @@ openStore().then(async database => {
   store = database;
   auth = createAuth({ store });
   localAdmin = createLocalAdmin({ store,auth });
+  localBuyer = createLocalBuyer({ store,auth });
   await initializeCatalog(store);
   server.listen(port, '0.0.0.0', () => {
     console.log(`C.A.S.H. listening on port ${server.address().port}`);
