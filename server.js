@@ -25,13 +25,11 @@ async function jsonBody(request, limit = 8 * 1024 * 1024) {
 
 const publicDirectory = path.join(__dirname, 'THECASH', 'outputs');
 const files = new Map([
-  ['/', ['index.html', 'text/html; charset=utf-8']],
   ['/buyer', ['buyer.html', 'text/html; charset=utf-8']],
   ['/buyer.html', ['buyer.html', 'text/html; charset=utf-8']],
   ['/admin', ['admin.html', 'text/html; charset=utf-8']],
   ['/admin.html', ['admin.html', 'text/html; charset=utf-8']],
   ['/seller', ['admin.html', 'text/html; charset=utf-8']],
-  ['/index.html', ['index.html', 'text/html; charset=utf-8']],
   ['/app.js', ['app.js', 'text/javascript; charset=utf-8']],
   ['/styles.css', ['styles.css', 'text/css; charset=utf-8']],
 ]);
@@ -56,6 +54,10 @@ const server = http.createServer(async (request, response) => {
     response.end();
     return;
   }
+  if (['/', '/index.html'].includes(pathname) && ['GET','HEAD'].includes(request.method)) {
+    response.writeHead(302, { Location: '/buyer', 'Cache-Control': 'no-store' });
+    response.end(); return;
+  }
   if (pathname.startsWith('/api/auth/')) {
     response.setHeader('Content-Type', 'application/json');
     response.setHeader('Cache-Control', 'no-store');
@@ -65,8 +67,6 @@ const server = http.createServer(async (request, response) => {
       else if (pathname === '/api/auth/buyer/register' && request.method === 'POST') result = await localBuyer.register(request,response,await jsonBody(request,20000));
       else if (pathname === '/api/auth/buyer/login' && request.method === 'POST') result = await localBuyer.login(request,response,await jsonBody(request,20000));
       else if (pathname === '/api/auth/buyer/logout' && request.method === 'POST') result = await auth.buyerLogout(request,response);
-      else if (pathname === '/api/auth/guest/session' && request.method === 'GET') result = await auth.guestSession(request);
-      else if (pathname === '/api/auth/guest' && request.method === 'POST') { await jsonBody(request,2000); result = await auth.enterGuest(request,response); }
       else if (pathname === '/api/auth/admin/status' && request.method === 'GET') result = await localAdmin.status(request);
       else if (pathname === '/api/auth/admin/setup' && request.method === 'POST') result = await localAdmin.setup(request, response, await jsonBody(request, 20000));
       else if (pathname === '/api/auth/admin/login' && request.method === 'POST') result = await localAdmin.login(request, response, await jsonBody(request, 20000));

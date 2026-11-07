@@ -191,39 +191,38 @@ test('Buyer login and Admin login serve distinct HTML pages without mixed option
   const home = await fetch(service.base+'/').then(response=>response.text());
   const buyer = await fetch(service.base+'/buyer').then(response=>response.text());
   const admin = await fetch(service.base+'/admin').then(response=>response.text());
+  for (const route of ['/', '/index.html']) {
+    const redirect = await fetch(service.base+route,{redirect:'manual'});
+    assert.equal(redirect.status,302);assert.equal(redirect.headers.get('location'),'/buyer');
+    const head = await fetch(service.base+route,{method:'HEAD',redirect:'manual'});
+    assert.equal(head.status,302);assert.equal(head.headers.get('location'),'/buyer');
+  }
   assert.notEqual(buyer,admin);
   assert.match(buyer,/<title>Buyer login \| C\.A\.S\.H\.<\/title>/);
   assert.match(admin,/<title>Admin login \| C\.A\.S\.H\.<\/title>/);
   for (const html of [buyer,admin]) {
     const login=html.slice(html.indexOf('<section id="signInScreen"'),html.indexOf('<div id="workspace"'));
-    assert.ok(!login.includes('href="/buyer"'));assert.ok(!login.includes('href="/admin"'));
-    assert.ok(login.includes('id="enterDemo"'));assert.ok(login.includes('href="/"'));
+    assert.equal(login.includes('id="enterDemo"'), html === admin);
   }
-  assert.ok(!home.includes('id="signInScreen"'));assert.ok(!home.includes('src="/app.js"'));
-  assert.ok(home.includes('href="/buyer"'));assert.ok(home.includes('href="/admin"'));
+  assert.equal(home,buyer);
+  assert.ok(!buyer.includes('href="/admin"'));assert.ok(!buyer.includes('href="/seller"'));assert.ok(!buyer.includes('Switch workspace'));assert.ok(!buyer.includes('Choose a workspace'));
+  assert.ok(!admin.includes('href="/buyer"'));assert.ok(!admin.includes('href="/"'));assert.ok(!admin.includes('Switch workspace'));
   assert.equal(await fetch(service.base+'/buyer.html').then(r=>r.text()),buyer);
   assert.equal(await fetch(service.base+'/admin.html').then(r=>r.text()),admin);
 });
 
-test('guest buyers use shared stock and private browser receipts without Admin privileges',async(t)=>{
+test('guest endpoints are removed and signed-out visitors cannot shop or read receipts',async(t)=>{
   const service=await boot(':memory:');t.after(()=>service.stop());
-  const enter=(cookie)=>fetch(service.base+'/api/auth/guest',{method:'POST',headers:{Origin:service.base,'Content-Type':'application/json',...(cookie?{Cookie:cookie}:{})},body:'{}'});
-  const first=await enter();assert.equal(first.status,200);
-  const guest=(await first.json()).user;assert.equal(guest.provider,'guest');assert.equal(guest.role,'buyer');
-  const guestCookie=first.headers.getSetCookie().find(value=>value.startsWith('cash_guest='))?.split(';')[0];assert.ok(guestCookie);
-  const headers={Cookie:guestCookie,'X-Cash-Guest':'1',Origin:service.base,'Content-Type':'application/json'};
-  const read=route=>fetch(service.base+route,{headers});
-  assert.equal((await read('/api/shop')).status,401);
-  assert.equal((await fetch(service.base+'/api/shop',{method:'PUT',headers,body:'{}'})).status,401);
-  const catalog=await read('/api/catalog').then(r=>r.json());const product=catalog.state.products[0];
-  const sale=await fetch(service.base+'/api/sales',{method:'POST',headers,body:JSON.stringify({productId:product.id,quantity:1,revision:catalog.revision,buyerId:'spoofed-owner'})});
-  assert.equal(sale.status,200);
-  const adminView=await service.fetch('/api/shop').then(r=>r.json());
-  assert.equal(adminView.state.products.find(p=>p.id===product.id).stock,product.stock-1);
-  assert.equal(adminView.state.activity[0].buyerId,guest.sub);
-  const own=await read('/api/my-purchases').then(r=>r.json());assert.equal(own.purchases.length,1);assert.equal(own.purchases[0].unitCost,undefined);
-  const again=await enter(guestCookie).then(r=>r.json());assert.equal(again.user.sub,guest.sub,'same browser keeps its receipts');
-  const second=await enter();const otherCookie=second.headers.getSetCookie().find(v=>v.startsWith('cash_guest='))?.split(';')[0];
-  const other=await fetch(service.base+'/api/my-purchases',{headers:{Cookie:otherCookie,'X-Cash-Guest':'1'}}).then(r=>r.json());assert.equal(other.purchases.length,0);
-  const crossSite=await fetch(service.base+'/api/auth/guest',{method:'POST',headers:{Origin:'https://attacker.example','Content-Type':'application/json'},body:'{}'});assert.equal(crossSite.status,403);
+  const cookie='cash_guest='+'a'.repeat(64);
+  const headers={Cookie:cookie,'X-Cash-Guest':'1',Origin:service.base,'Content-Type':'application/json'};
+  assert.equal((await fetch(service.base+'/api/auth/guest',{method:'POST',headers,body:'{}'})).status,404);
+  assert.equal((await fetch(service.base+'/api/auth/guest/session',{headers})).status,404);
+  for(const route of ['/api/catalog','/api/my-purchases','/api/shop']){
+    assert.equal((await fetch(service.base+route)).status,401);
+    assert.equal((await fetch(service.base+route,{headers})).status,401);
+  }
+  assert.equal((await fetch(service.base+'/api/sales',{method:'POST',headers,body:'{}'})).status,401);
+  const buyer=await fetch(service.base+'/buyer').then(r=>r.text());
+  assert.ok(!buyer.includes('Continue as guest'));assert.ok(!buyer.includes('id="enterDemo"'));
+  assert.ok(buyer.includes('id="buyerPasswordForm"'));assert.ok(buyer.includes('Create an account'));
 });

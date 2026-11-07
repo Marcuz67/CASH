@@ -12,7 +12,7 @@
   <a class="skip-link" href="#main">Skip to content</a>
   <section id="welcome" hidden aria-hidden="true"></section>
   <section id="signInScreen" class="access-page" aria-labelledby="signInTitle">
-    <header class="access-header"><a class="wordmark" href="/">C.A.S.H.</a><span>Central Accountant and Storage Helper</span></header>
+    <header class="access-header"><a class="wordmark" href="/admin">C.A.S.H.</a><span>Central Accountant and Storage Helper</span></header>
     <div class="access-content">
       <div class="access-card">
         <div class="access-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="4" width="16" height="16" rx="1"/><path d="M4 10h16M10 10v10"/></svg></div>
@@ -38,14 +38,13 @@
         <button id="enterDemo" class="secondary demo-entry" type="button">Try demo mode</button>
         <button id="retrySignIn" class="secondary" type="button" hidden>Reload sign-in</button>
         <p class="access-demo-note">No account needed for the demo.<br>Sample data stays in this browser.</p>
-        <a class="access-back" href="/">&larr; Back to home</a>
       </div>
     </div>
     <footer class="access-footer">C.A.S.H. &middot; Central Accountant and Storage Helper</footer>
   </section>
   <div id="workspace" class="workspace" hidden>
     <aside id="sidebar" class="sidebar" aria-label="Administration">
-      <a href="/" class="wordmark">C.A.S.H.</a>
+      <a href="/admin" class="wordmark">C.A.S.H.</a>
       <p class="brand-description">Central Accountant<br>and Storage Helper</p>
       <p class="nav-heading">STORE MANAGEMENT</p>
       <nav id="adminNav" aria-label="Admin navigation">
@@ -56,13 +55,13 @@
         <button data-view="rankings">Product rankings</button>
         <button data-view="settings">Store settings</button>
       </nav>
-      <div class="sidebar-footer"><span>Shared store database</span><a href="/buyer">Open buyer page &rarr;</a></div>
+      <div class="sidebar-footer"><span>Shared store database</span></div>
     </aside>
     <div class="main-column">
       <header class="topbar">
-        <a href="/" class="buyer-brand wordmark" id="buyerBrand" hidden>C.A.S.H.</a>
+        <a href="/admin" class="buyer-brand wordmark" id="buyerBrand" hidden>C.A.S.H.</a>
         <span id="shopName">Your store</span>
-        <div class="topbar-actions"><span id="signedInAccount" class="account-email"></span><button id="signOut" class="quiet" type="button">Sign out</button><button id="themeToggle" class="quiet" type="button">Dark mode</button><a class="button secondary" href="/">Switch workspace</a></div>
+        <div class="topbar-actions"><span id="signedInAccount" class="account-email"></span><button id="signOut" class="quiet" type="button">Sign out</button><button id="themeToggle" class="quiet" type="button">Dark mode</button></div>
       </header>
       <main id="main" tabindex="-1">
         <div class="page-heading"><div><p id="viewLabel" class="eyebrow">ADMIN WORKSPACE</p><h1 id="pageTitle">Overview</h1><p id="pageDescription" class="muted"></p></div><span id="connectionStatus" class="connection" role="status">Connecting...</span></div>
@@ -121,6 +120,7 @@
   <dialog id="saleDialog" aria-labelledby="saleDialogTitle"><form id="saleForm"><div class="dialog-heading"><h2 id="saleDialogTitle">Record purchase</h2><button class="close" type="button" data-close="saleDialog" aria-label="Close purchase form">&times;</button></div><div class="form-body"><input id="saleProductId" type="hidden"><img id="saleProductPhoto" class="sale-product-photo" alt="" hidden><h3 id="saleProductName"></h3><p id="saleAvailability" class="muted"></p><p id="saleLimitNote" class="small-note"></p><label>Quantity<input id="saleQuantity" type="number" min="1" step="1" value="1" required></label><div class="sale-total"><span>Total</span><strong id="saleTotal"></strong></div><p class="small-note">This records a purchase and deducts stock. No online payment is collected.</p></div><div class="dialog-actions"><button class="secondary" type="button" data-close="saleDialog">Cancel</button><button class="primary" type="submit" id="confirmSale">Confirm purchase</button></div></form></dialog>
   <dialog id="receiveDialog" aria-labelledby="receiveTitle"><form id="receiveForm"><div class="dialog-heading"><h2 id="receiveTitle">Receive stock</h2><button class="close" type="button" data-close="receiveDialog" aria-label="Close stock receiving">&times;</button></div><div class="form-body"><input id="receiveProductId" type="hidden"><p id="receiveProductName"></p><label>Units received<input id="receiveQuantity" type="number" min="1" step="1" required></label><p class="small-note">Adds units to stock. This does not record a customer sale or a purchase expense.</p></div><div class="dialog-actions"><button class="secondary" type="button" data-close="receiveDialog">Cancel</button><button class="primary" type="submit">Save stock</button></div></form></dialog>
   <dialog id="removeDialog" aria-labelledby="removeTitle"><form id="removeForm"><div class="dialog-heading"><h2 id="removeTitle">Remove product?</h2><button class="close" type="button" data-close="removeDialog" aria-label="Close removal dialog">&times;</button></div><div class="form-body"><input id="removeProductId" type="hidden"><p id="removeProductName"></p><p>Recorded sales and receipts will remain in Accounting.</p></div><div class="dialog-actions"><button class="secondary" type="button" data-close="removeDialog">Cancel</button><button class="danger" type="submit">Remove product</button></div></form></dialog>
+  <dialog id="adminSalesWelcome" aria-labelledby="adminSalesWelcomeTitle" aria-describedby="adminLatestSale adminSalesEncouragement"><div class="dialog-heading"><h2 id="adminSalesWelcomeTitle">Welcome back!</h2><button type="button" class="close" data-close="adminSalesWelcome" aria-label="Dismiss sales update">&times;</button></div><div class="form-body"><p class="eyebrow">YOUR STORE UPDATE</p><p id="adminLatestSale" class="sales-welcome-message"></p><p id="adminLatestSaleDate" class="small-note"></p><h3>Today's sales</h3><dl class="sales-welcome-totals"><div><dt>Purchases</dt><dd id="adminTodaySales"></dd></div><div><dt>Items sold</dt><dd id="adminTodayUnits"></dd></div><div><dt>Revenue</dt><dd id="adminTodayRevenue"></dd></div></dl><p id="adminSalesEncouragement" class="sales-welcome-note"></p></div><div class="dialog-actions"><button type="button" class="primary" data-close="adminSalesWelcome" autofocus>Let's get started</button></div></dialog>
   <div id="toast" class="toast" role="status" hidden></div>
 </body>
 </html>

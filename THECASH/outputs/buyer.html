@@ -34,10 +34,7 @@
         <div class="access-divider" aria-hidden="true">or</div>
         <div id="googleSignInButton" class="google-sign-in" hidden></div>
         <p id="signInStatus" class="access-status" role="status">Google Play not available yet</p>
-        <button id="enterDemo" class="secondary demo-entry" type="button">Continue as guest</button>
         <button id="retrySignIn" class="secondary" type="button" hidden>Reload sign-in</button>
-        <p class="access-demo-note">No account or password needed.<br>Your receipts are linked to this browser.</p>
-        <a class="access-back" href="/">&larr; Back to home</a>
       </div>
     </div>
     <footer class="access-footer">C.A.S.H. &middot; Central Accountant and Storage Helper</footer>
@@ -55,23 +52,23 @@
         <button data-view="rankings">Product rankings</button>
         <button data-view="settings">Store settings</button>
       </nav>
-      <div class="sidebar-footer"><span>Shared store database</span><a href="/buyer">Open buyer page &rarr;</a></div>
+      <div class="sidebar-footer"><span>Shared store database</span></div>
     </aside>
     <div class="main-column">
       <header class="topbar">
         <a href="/" class="buyer-brand wordmark" id="buyerBrand" hidden>C.A.S.H.</a>
         <span id="shopName">Your store</span>
-        <div class="topbar-actions"><span id="signedInAccount" class="account-email"></span><button id="signOut" class="quiet" type="button">Sign out</button><button id="themeToggle" class="quiet" type="button">Dark mode</button><a class="button secondary" href="/">Switch workspace</a></div>
+        <div class="topbar-actions"><span id="signedInAccount" class="account-email"></span><button id="signOut" class="quiet" type="button">Sign out</button><button id="themeToggle" class="quiet" type="button">Dark mode</button></div>
       </header>
       <main id="main" tabindex="-1">
         <div class="page-heading"><div><p id="viewLabel" class="eyebrow">ADMIN WORKSPACE</p><h1 id="pageTitle">Overview</h1><p id="pageDescription" class="muted"></p></div><span id="connectionStatus" class="connection" role="status">Connecting...</span></div>
         <div id="loadError" class="notice error" role="alert" hidden><span id="loadErrorText"></span><button id="retryLoad" type="button">Try again</button></div>
         <div id="syncNotice" class="notice error" role="alert" hidden><span id="syncNoticeText"></span><button id="reloadStore" type="button">Reload store</button></div>
         <div id="loading" class="empty">Loading store records...</div>
-        <div id="guestModeNotice" class="notice guest-notice" hidden><span><strong>Guest access</strong> &middot; No account needed. Receipts are linked to this browser.</span></div>
         <div id="demoModeNotice" class="notice demo-notice" hidden><span><strong>Demo mode</strong> &middot; Sample data in this browser only. The live store is unchanged.</span><button id="resetDemo" class="secondary" type="button">Reset demo</button></div>
         <div id="sampleCatalogNotice" class="notice" hidden><span>Starter products use sample prices and quantities. Admin can review and edit them in Inventory.</span><button id="markCatalogReviewed" class="secondary" type="button">Mark reviewed</button></div>
         <div id="views" hidden>
+          <nav id="buyerNav" class="buyer-navigation" aria-label="Buyer navigation"><button type="button" data-view="sales" aria-current="page">Shop</button><button type="button" data-view="history">Purchase history</button></nav>
           <section id="overviewView" class="view" aria-label="Overview" hidden>
             <div id="overviewStats" class="stats"></div>
             <div class="dashboard-grid">
@@ -87,10 +84,13 @@
           </section>
 
           <section id="salesView" class="view" aria-label="Products and sales" hidden>
-            <div id="purchaseReceipt" class="notice success" hidden><div><strong>Purchase recorded</strong><p id="purchaseReceiptText"></p><small>No online payment was collected.</small></div><button id="downloadPurchaseReceipt" class="secondary" type="button">Download receipt</button></div>
+            <div id="purchaseReceipt" class="notice success" hidden><div><strong>Purchase recorded</strong><p id="purchaseReceiptText"></p><small>No online payment was collected.</small></div><div class="row-actions"><button id="viewLatestPurchaseReceipt" class="secondary" type="button">View receipt</button><button id="downloadPurchaseReceipt" class="secondary" type="button">Download receipt</button><button type="button" data-view="history">Purchase history</button></div></div>
             <div class="toolbar"><label class="search-field"><span class="sr-only">Search products</span><input id="salesSearch" type="search" placeholder="Search products"></label><label><span class="sr-only">Sales category</span><select id="salesCategory"><option value="">All categories</option></select></label><span id="catalogCount" class="muted"></span></div>
             <div id="productCatalog" class="product-grid"></div>
-            <article id="purchaseHistoryPanel" class="panel purchase-history" hidden><div class="panel-heading"><div><h2>My purchases</h2><p id="purchaseHistoryDescription">Guest receipts from this browser</p></div></div><div id="myPurchasesTable" class="table-wrap"></div></article>
+          </section>
+
+          <section id="historyView" class="view" aria-label="Purchase history" hidden>
+            <article id="purchaseHistoryPanel" class="panel purchase-history" hidden><div class="panel-heading"><div><h2>My purchases</h2><p id="purchaseHistoryDescription">Your saved purchases and receipts</p></div><button id="refreshPurchaseHistory" type="button">Refresh history</button></div><div id="myPurchasesTable" class="table-wrap" aria-live="polite"></div></article>
           </section>
 
           <section id="accountingView" class="view" aria-label="Accounting" hidden>
@@ -121,6 +121,7 @@
   <dialog id="saleDialog" aria-labelledby="saleDialogTitle"><form id="saleForm"><div class="dialog-heading"><h2 id="saleDialogTitle">Record purchase</h2><button class="close" type="button" data-close="saleDialog" aria-label="Close purchase form">&times;</button></div><div class="form-body"><input id="saleProductId" type="hidden"><img id="saleProductPhoto" class="sale-product-photo" alt="" hidden><h3 id="saleProductName"></h3><p id="saleAvailability" class="muted"></p><p id="saleLimitNote" class="small-note"></p><label>Quantity<input id="saleQuantity" type="number" min="1" step="1" value="1" required></label><div class="sale-total"><span>Total</span><strong id="saleTotal"></strong></div><p class="small-note">This records a purchase and deducts stock. No online payment is collected.</p></div><div class="dialog-actions"><button class="secondary" type="button" data-close="saleDialog">Cancel</button><button class="primary" type="submit" id="confirmSale">Confirm purchase</button></div></form></dialog>
   <dialog id="receiveDialog" aria-labelledby="receiveTitle"><form id="receiveForm"><div class="dialog-heading"><h2 id="receiveTitle">Receive stock</h2><button class="close" type="button" data-close="receiveDialog" aria-label="Close stock receiving">&times;</button></div><div class="form-body"><input id="receiveProductId" type="hidden"><p id="receiveProductName"></p><label>Units received<input id="receiveQuantity" type="number" min="1" step="1" required></label><p class="small-note">Adds units to stock. This does not record a customer sale or a purchase expense.</p></div><div class="dialog-actions"><button class="secondary" type="button" data-close="receiveDialog">Cancel</button><button class="primary" type="submit">Save stock</button></div></form></dialog>
   <dialog id="removeDialog" aria-labelledby="removeTitle"><form id="removeForm"><div class="dialog-heading"><h2 id="removeTitle">Remove product?</h2><button class="close" type="button" data-close="removeDialog" aria-label="Close removal dialog">&times;</button></div><div class="form-body"><input id="removeProductId" type="hidden"><p id="removeProductName"></p><p>Recorded sales and receipts will remain in Accounting.</p></div><div class="dialog-actions"><button class="secondary" type="button" data-close="removeDialog">Cancel</button><button class="danger" type="submit">Remove product</button></div></form></dialog>
+  <dialog id="buyerReceiptDialog" aria-labelledby="buyerReceiptTitle"><div class="dialog-heading"><h2 id="buyerReceiptTitle">Purchase receipt</h2><button type="button" class="close" data-close="buyerReceiptDialog" aria-label="Close receipt">&times;</button></div><div id="buyerReceiptDetails" class="form-body receipt-details"></div><div class="dialog-actions"><button type="button" class="secondary" data-close="buyerReceiptDialog">Close</button><button id="downloadViewedReceipt" type="button" class="primary">Download PDF</button></div></dialog>
   <div id="toast" class="toast" role="status" hidden></div>
 </body>
 </html>

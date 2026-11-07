@@ -15,7 +15,7 @@ Open http://localhost:3000/buyer or http://localhost:3000/admin. Use the Node se
 
 ## Edit the interface
 
-- `THECASH/outputs/index.html` is the home page. Buyer login is in `buyer.html`; Admin login is in `admin.html`. Both entry documents share app.js and styles.css.
+- `/` and `/index.html` redirect to Buyer; index.html is a fallback redirect. Buyer login is in `buyer.html`; Admin login is in `admin.html`, reached using /admin directly. Buyer has no workspace switcher or Admin link. Both entry documents share app.js and styles.css.
 - `THECASH/outputs/styles.css` contains solid-color styles, dark-mode variables, and responsive layouts. No framework or external font service is required.
 - `THECASH/outputs/app.js` loads data, draws screens, handles forms, and downloads PDF receipts. Google sign-in is handled by auth.js on the server; no Firebase code is required.
 
@@ -45,14 +45,14 @@ The default local origin is http://localhost:3000. Set DATABASE_URL and APP_ORIG
 
 ## Demo preview
 
-Google sign-in is currently paused. Buyer accounts and optional Continue as guest use the shared store inventory. The optional Admin demo uses separate browser data and does not call live store APIs. Use Reset demo to restore its sample items. Google setup is only required when the Google integration is enabled later.
+Google sign-in is currently paused. Signed-in Buyer accounts use the shared store inventory. The optional Admin demo uses separate browser data and does not call live store APIs. Use Reset demo to restore its sample items. Google setup is only required when the Google integration is enabled later.
 
 ## Admin username/password
 
 The separate Admin page now has a real login form and first-time account setup. See ADMIN_ACCOUNT_SETUP.md for localhost and Render instructions. The local-admin.js module hashes/verifies passwords and checks owner-only setup; database.js stores the account and attempt limits. Google is not required for this Admin login.
 
-## Buyer accounts and Guest access
+## Buyer accounts
 
 Buyer opens with a username/password login and a Create an account button below it. Registration saves a Buyer account with a salted password hash in PostgreSQL on Render or SQLite locally. Account receipts follow the account across devices. Local accounts and Render accounts are separate. Password reset is not included yet.
 
-Continue as guest remains available. Guest identity and receipts use a separate HttpOnly browser cookie; no account is created. Guest purchases are not automatically transferred to registered accounts. Admin credentials are still required for inventory editing and reports. The optional Admin demo stays browser-only and does not affect the shared store.
+Guest access is removed. Shopping and receipt history require a signed-in Buyer account. Historical Guest sales remain in Admin accounting and are not automatically transferred to registered accounts. Admin credentials are still required for inventory editing and reports. The optional Admin demo stays browser-only and does not affect the shared store.

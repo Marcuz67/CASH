@@ -28,6 +28,10 @@ Local and Render databases are separate. An account created on your computer doe
 
 Render sessions use Secure, HttpOnly cookies. The password is stored as a salted scrypt hash; it is not stored in plaintext or browser storage. Login limits and the Admin account are stored in PostgreSQL and survive deploys. The single-account insert prevents two concurrent setup requests from creating different administrators.
 
-Buyer has a separate username/password login and public account registration below its login form. These accounts cannot become Admin. Optional Guest access keeps receipts tied to a browser cookie. The optional Admin demo is a separate browser-only sample store; it does not authenticate to the real database or create a real account.
+Buyer has a separate username/password login and public account registration below its login form. These accounts cannot become Admin. Buyers must log in or register to shop and access their receipts. The optional Admin demo is a separate browser-only sample store; it does not authenticate to the real database or create a real account.
 
 The current UI does not include password reset or additional local Admin account creation. Do not share your password. Google authentication remains prepared for later activation.
+
+## Sales welcome popup
+
+After Admin signs in and records load, a dismissible popup shows the latest recorded purchase and today's purchase count, units, and revenue. Today follows the browser's local date. It uses recorded sales, not payment confirmations or invented activity. With no sales, it shows an encouraging empty state. Close it with the X, Let's get started, or Escape. Dashboard updates do not reopen it; it appears on the next login or a fresh Admin page visit. Demo mode labels the popup as a demo sales update.

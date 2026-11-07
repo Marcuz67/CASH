@@ -1,6 +1,6 @@
 # Enable Google accounts for C.A.S.H.
 
-Google sign-in is temporarily paused. Buyer now uses Continue as guest with a separate browser cookie and the shared store inventory. Admin uses username/password login, with an optional isolated demo. No Google configuration is needed for these flows. To offer Google accounts later, complete this setup and enable GOOGLE_SIGN_IN_AVAILABLE in app.js; retain guest access as an alternative. Guest records are not automatically assigned to a later Google account.
+Google sign-in is temporarily paused. Buyer uses username/password login and public account registration. Admin uses a separate username/password login, with an optional isolated demo. Google configuration is not required for these flows. Guest access has been removed. To offer Google accounts later, complete this setup and enable GOOGLE_SIGN_IN_AVAILABLE in app.js. Existing password accounts and historical Guest records are not automatically linked to a Google account.
 
 The code supports separate Buyer and Seller/Admin sign-in screens. Both use Google Identity Services. No Firebase or Gmail inbox permissions are needed. The integration uses a Web client ID; it does not need an OAuth client secret.
 

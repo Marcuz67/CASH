@@ -30,7 +30,6 @@ document.querySelectorAll('form').forEach(form => form.addEventListener('reset',
 const GOOGLE_SIGN_IN_AVAILABLE = false;
 const DEMO_KEY = 'cash-demo-store-v1';
 let demoMode = false;
-let guestMode = false;
 let buyerAccountMode = false;
 let buyerRegistrationMode = false;
 let buyerAuthPending = false;
@@ -48,6 +47,7 @@ let productPhoto = null;
 let storePhoto = null;
 let photoPending = 0;
 let lastPurchase = null;
+let viewedReceipt = null;
 let toastTimer;
 let pollTimer;
 let signedInUser = null;
@@ -57,6 +57,7 @@ let googleClientLoading;
 let adminSetupMode = false;
 let adminAccountState = null;
 let adminAuthPending = false;
+let adminSalesWelcomeShown = false;
 const money = (value) => new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(Number(value) || 0);
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
 const dateLabel = (value) => new Date(value).toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' });
@@ -65,6 +66,7 @@ const round = (value) => Math.round((value + Number.EPSILON) * 100) / 100;
 const byId = (id) => state.products.find((product) => product.id === id);
 const empty = (message) => `<div class="empty">${esc(message)}</div>`;
 const titles = {
+  history: ['Purchase history', 'View your previous purchases and download receipts.'],
   overview: ['Overview', 'A summary of stock and recorded sales.'],
   inventory: ['Inventory', 'Manage products, prices, and available stock.'],
   sales: ['Sales', 'Record customer purchases and update stock.'],
@@ -99,7 +101,7 @@ function setBusy(value) {
   }
   syncStatus(value ? 'Saving...' : 'Connected to shared store');
 }
-function shopperHeaders() { return guestMode ? {'X-Cash-Guest':'1'} : buyerAccountMode ? {'X-Cash-Buyer':'1'} : {}; }
+function shopperHeaders() { return buyerAccountMode ? {'X-Cash-Buyer':'1'} : {}; }
 async function readStore() {
   if (demoMode) return readDemoStore();
   const response = await fetch(mode === 'buyer' ? '/api/catalog' : '/api/shop', { cache: 'no-store', headers: shopperHeaders() });
@@ -166,12 +168,11 @@ async function start() {
   document.body.dataset.mode = mode;
   $('welcome').hidden = true; $('signInScreen').hidden = true; $('workspace').hidden = false;
   $('signedInAccount').textContent = signedInUser.email || signedInUser.username || signedInUser.name;
-  $('signOut').textContent = guestMode ? 'Back to Buyer access' : demoMode ? 'Exit demo' : 'Sign out';
-  if ($('guestModeNotice')) $('guestModeNotice').hidden = !guestMode;
+  $('signOut').textContent = demoMode ? 'Exit demo' : 'Sign out';
   $('demoModeNotice').hidden = !demoMode;
   document.querySelector('.sidebar-footer span').textContent = demoMode ? 'Demo store in this browser' : 'Shared store database';
   $('sidebar').hidden = mode === 'buyer'; $('buyerBrand').hidden = mode !== 'buyer';
-  $('viewLabel').textContent = mode === 'buyer' ? (guestMode ? 'GUEST BUYER' : 'BUYER WORKSPACE') : 'ADMIN WORKSPACE';
+  $('viewLabel').textContent = mode === 'buyer' ? 'BUYER WORKSPACE' : 'ADMIN WORKSPACE';
   $('loading').hidden = false; $('loadError').hidden = true;
   try {
     let data = await readStore();
@@ -179,14 +180,38 @@ async function start() {
     render(); showView(view); syncStatus('Connected to shared store');
     if (mode === 'buyer') await loadMyPurchases();
     clearInterval(pollTimer); pollTimer = setInterval(refresh, 5000);
+    if (mode === 'admin') showAdminSalesWelcome();
   } catch (error) {
     if ([401,403].includes(error.status)) { await startWithAuth(); return; }
     $('loading').hidden = true; $('loadError').hidden = false;
     $('loadErrorText').textContent = error.message; syncStatus('Not connected');
   }
 }
+function showAdminSalesWelcome() {
+  const dialog = $('adminSalesWelcome');
+  if (mode !== 'admin' || !state || adminSalesWelcomeShown || !dialog) return;
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const sales = state.activity.filter(sale => sale.date <= now.getTime()).map(financials).sort((a,b) => b.date - a.date);
+  const todaySales = sales.filter(sale => sale.date >= todayStart);
+  const sum = totals(todaySales);
+  const latest = sales[0];
+  $('adminSalesWelcomeTitle').textContent = demoMode ? 'Demo sales update' : 'Welcome back!';
+  $('adminLatestSale').textContent = latest
+    ? `${latest.buyerId?.startsWith('local-buyer:') && latest.buyerName ? latest.buyerName + ' bought' : 'Latest purchase:'} ${latest.qty} x ${latest.name}.`
+    : 'Your next sale starts here.';
+  $('adminLatestSaleDate').textContent = latest ? `Recorded ${dateLabel(latest.date)} | ${money(latest.revenue)}` : 'No purchases have been recorded yet.';
+  $('adminTodaySales').textContent = String(todaySales.length);
+  $('adminTodayUnits').textContent = String(sum.units);
+  $('adminTodayRevenue').textContent = money(sum.revenue);
+  $('adminSalesEncouragement').textContent = todaySales.length
+    ? 'Every sale counts. Keep your shelves ready for the next customer!'
+    : 'A fresh day, a new chance to sell. Check your stock and get ready for your next customer!';
+  adminSalesWelcomeShown = true;
+  dialog.showModal();
+}
 function showView(name) {
-  if (!state || !titles[name] || (mode === 'buyer' && name !== 'sales')) return;
+  if (!state || !titles[name] || (mode === 'buyer' && !['sales','history'].includes(name)) || (mode === 'admin' && name === 'history')) return;
   if (settingsDirty && name !== 'settings' && !window.confirm('Leave without saving your store settings?')) return;
   if (name !== 'settings') settingsDirty = false;
   view = name;
@@ -194,8 +219,12 @@ function showView(name) {
   document.querySelectorAll('#adminNav [data-view]').forEach((button) => {
     if (button.dataset.view === name) button.setAttribute('aria-current', 'page'); else button.removeAttribute('aria-current');
   });
-  $('pageTitle').textContent = mode === 'buyer' ? 'Browse products' : titles[name][0];
-  $('pageDescription').textContent = mode === 'buyer' ? 'Choose a product and quantity to record a purchase. No online payment is collected.' : titles[name][1];
+  document.querySelectorAll('#buyerNav [data-view]').forEach(button => {
+    if (button.dataset.view === name) button.setAttribute('aria-current','page'); else button.removeAttribute('aria-current');
+  });
+  $('pageTitle').textContent = mode === 'buyer' && name === 'sales' ? 'Browse products' : titles[name][0];
+  $('pageDescription').textContent = mode === 'buyer' && name === 'sales' ? 'Choose a product and quantity to record a purchase. No online payment is collected.' : titles[name][1];
+  if (name === 'history') loadMyPurchases();
   if (name === 'settings') fillSettings();
   window.scrollTo({ top: 0, behavior: 'instant' });
 }
@@ -517,6 +546,12 @@ function createPdf(lines) {
   result += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
   return new Blob([result], { type: 'application/pdf' });
 }
+function openBuyerReceipt(receipt) {
+  if (mode !== 'buyer' || !receipt || !$('buyerReceiptDialog')) return;
+  viewedReceipt = receipt;
+  $('buyerReceiptDetails').innerHTML = `<p class="receipt-store"><strong>${esc(state.profile.store)}</strong><br>${esc(state.profile.location || '')}</p><dl><dt>Receipt number</dt><dd>${esc(receipt.id)}</dd><dt>Date</dt><dd>${esc(dateLabel(receipt.date))}</dd><dt>Buyer</dt><dd>${esc(receipt.buyerName || signedInUser.name)}</dd><dt>Product</dt><dd>${esc(receipt.name)}</dd><dt>Quantity</dt><dd>${esc(receipt.qty)}</dd><dt>Unit price</dt><dd>${money(receipt.unitPrice)}</dd><dt>Total</dt><dd><strong>${money(receipt.revenue)}</strong></dd></dl><p class="small-note">Purchase record only. No online payment was collected.</p>`;
+  $('buyerReceiptDialog').showModal();
+}
 function downloadPdf(records, title, filename, admin = true) {
   if (!records.length) return toast('There are no sales to download.');
   const sales = records.map(financials); const sum = totals(sales);
@@ -549,7 +584,9 @@ document.addEventListener('click', (event) => {
   const action = event.target.closest('[data-action]');
   if (!action || saving || uncertainSave) return;
   const id = action.dataset.id;
-  if (action.dataset.action === 'receipt') {
+  if (action.dataset.action === 'viewReceipt') {
+    openBuyerReceipt(myPurchases.find(item => item.id === id));
+  } else if (action.dataset.action === 'receipt') {
     const receipt = myPurchases.find(item => item.id === id);
     if (receipt) downloadPdf([receipt], 'Purchase record', `cash-purchase-${receipt.id}.pdf`, false);
   } else if (action.dataset.action === 'sell') openSale(id);
@@ -586,6 +623,9 @@ $('reportFilters').addEventListener('submit', (event) => {
 $('downloadReport').addEventListener('click', () => downloadPdf(rangeSales(), `Sales report: ${reportRange.from} through ${reportRange.to}`, `cash-sales-${reportRange.from}-${reportRange.to}.pdf`));
 $('latestReceipt').addEventListener('click', () => { const sale = latestMonthSale(); if (sale) downloadPdf([sale], 'Latest sale this month', `cash-receipt-${sale.id || sale.date}.pdf`); });
 $('downloadPurchaseReceipt').addEventListener('click', () => { if (lastPurchase) downloadPdf([lastPurchase], 'Purchase record', `cash-purchase-${lastPurchase.id}.pdf`, false); });
+$('viewLatestPurchaseReceipt')?.addEventListener('click', () => openBuyerReceipt(lastPurchase));
+$('downloadViewedReceipt')?.addEventListener('click', () => { if (viewedReceipt) downloadPdf([viewedReceipt], 'Purchase record', `cash-purchase-${viewedReceipt.id}.pdf`, false); });
+$('refreshPurchaseHistory')?.addEventListener('click', loadMyPurchases);
 $('retryLoad').addEventListener('click', start); $('reloadStore').addEventListener('click', () => location.reload());
 document.addEventListener('visibilitychange', refresh);
 window.addEventListener('beforeunload', (event) => { if (saving || settingsDirty) { event.preventDefault(); event.returnValue = ''; } });
@@ -608,22 +648,31 @@ startWithAuth();
 
 async function loadMyPurchases() {
   if (mode !== 'buyer' || !signedInUser) return;
+  const buyerId = signedInUser.sub;
+  const refreshButton = $('refreshPurchaseHistory');
+  if (refreshButton) refreshButton.disabled = true;
   $('purchaseHistoryPanel').hidden = false;
-  if ($('purchaseHistoryDescription')) $('purchaseHistoryDescription').textContent = guestMode ? 'Receipts linked to this browser. Clearing browser data removes access.' : buyerAccountMode ? 'Your account receipts, available on any device after login.' : demoMode ? 'Sample receipts saved in this browser' : 'Receipts from your Google account, across devices';
+  if ($('purchaseHistoryDescription')) $('purchaseHistoryDescription').textContent = buyerAccountMode ? 'Your account receipts, available on any device after login.' : demoMode ? 'Sample receipts saved in this browser' : 'Receipts from your Google account, across devices';
   try {
     const response = demoMode ? { ok: true, json: async () => ({ purchases: readDemoStore().state.activity.filter(sale => sale.buyerId === 'demo-buyer') }) } : await fetch('/api/my-purchases', { cache: 'no-store', headers:shopperHeaders() });
     if (!response.ok) throw new Error('Could not load your purchase history.');
-    myPurchases = (await response.json()).purchases.sort((a,b) => b.date - a.date);
+    const result = await response.json();
+    if (signedInUser?.sub !== buyerId) return;
+    myPurchases = result.purchases.sort((a,b) => b.date - a.date);
     $('myPurchasesTable').innerHTML = table(['Date','Product','Quantity','Total','Receipt'], myPurchases.map(receipt =>
-      `<tr><td>${esc(dateLabel(receipt.date))}</td><td>${esc(receipt.name)}</td><td>${receipt.qty}</td><td>${money(receipt.revenue)}</td><td><button type="button" data-action="receipt" data-id="${esc(receipt.id)}">Download PDF</button></td></tr>`), 'No purchases have been recorded yet.');
-  } catch (error) { $('myPurchasesTable').innerHTML = empty(error.message); }
+      `<tr><td>${esc(dateLabel(receipt.date))}</td><td>${esc(receipt.name)}</td><td>${receipt.qty}</td><td>${money(receipt.revenue)}</td><td><div class="row-actions"><button type="button" data-action="viewReceipt" data-id="${esc(receipt.id)}">View receipt</button><button type="button" data-action="receipt" data-id="${esc(receipt.id)}">Download PDF</button></div></td></tr>`), 'No purchases yet. Choose an item in Shop to make your first purchase.');
+  } catch (error) { if (signedInUser?.sub === buyerId) $('myPurchasesTable').innerHTML = empty(`${error.message} Use Refresh history to try again.`); }
+  finally { if (refreshButton) refreshButton.disabled = false; }
 }
 function clearPrivateView() {
+  adminSalesWelcomeShown = false;
   clearInterval(pollTimer);
   document.querySelectorAll('dialog[open]').forEach(dialog => dialog.close());
   $('workspace').hidden = true; $('views').hidden = true; $('purchaseReceipt').hidden = true;
   $('welcome').hidden = true; $('signInScreen').hidden = false;
-  state = null; signedInUser = null; myPurchases = []; lastPurchase = null;
+  state = null; signedInUser = null; myPurchases = []; lastPurchase = null; viewedReceipt = null;
+  $('buyerReceiptDetails')?.replaceChildren();
+  for (const id of ['adminLatestSale','adminLatestSaleDate','adminTodaySales','adminTodayUnits','adminTodayRevenue','adminSalesEncouragement']) $(id)?.replaceChildren();
   productPhoto = null; storePhoto = null; settingsDirty = false; uncertainSave = false;
   $('syncNotice').hidden = true;
   for (const id of ['productCatalog','inventoryTable','overviewSales','stockAlerts','reportTable','rankingsTable','myPurchasesTable','overviewStats','accountingStats','weekChart']) $(id).replaceChildren();
@@ -643,21 +692,19 @@ async function loadGoogleClient() {
   });
   return googleClientLoading;
 }
-async function startWithAuth({skipGuestResume=false} = {}) {
+async function startWithAuth() {
   if (!['admin','buyer'].includes(mode)) return;
-  guestMode = false; buyerAccountMode = false;
+  buyerAccountMode = false;
   clearPrivateView();
   $('signInTitle').textContent = mode === 'admin' ? 'Admin login' : 'Buyer login';
   $('signInDescription').textContent = mode === 'admin' ? 'Use an approved Google account to manage inventory and reports.' : 'Use your Google account to buy products and keep your receipts.';
   $('signInStatus').textContent = 'Checking your sign-in...';
   $('googleSignInButton').replaceChildren(); $('retrySignIn').hidden = true;
-  $('enterDemo').hidden = false;
+  if ($('enterDemo')) $('enterDemo').hidden = mode !== 'admin';
   $('googleSignInButton').hidden = !GOOGLE_SIGN_IN_AVAILABLE;
   if (mode === 'buyer') {
     demoMode = false;
-    $('enterDemo').textContent = 'Continue as guest'; $('enterDemo').disabled = true;
     const opened = await loadBuyerAccess();
-    $('enterDemo').disabled = false;
     if (opened) return;
   }
   if (mode === 'admin') {
@@ -706,7 +753,6 @@ $('retrySignIn').addEventListener('click', () => location.reload());
 $('signOut').addEventListener('click', async () => {
   if (saving) return toast('Please wait for the current save to finish.');
   if (settingsDirty && !confirm('Sign out without saving your store settings?')) return;
-  if (guestMode) { guestMode = false; await startWithAuth({skipGuestResume:true}); return; }
   if (buyerAccountMode) {
     try {
       const response=await fetch('/api/auth/buyer/logout',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
@@ -785,10 +831,10 @@ async function purchaseRequest(payload) {
   const saved = writeDemoStore({state:next,revision:current.revision+1});
   return {ok:true,status:200,json:async()=>({receipt,revision:saved.revision})};
 }
-$('enterDemo').addEventListener('click', async () => {
+$('enterDemo')?.addEventListener('click', async () => {
   if (adminAuthPending || loginPending || buyerAuthPending) return;
-  if (mode === 'buyer') { await enterGuestMode(); return; }
-  guestMode = false; demoMode = true;
+  if (mode !== 'admin') return;
+  demoMode = true;
   signedInUser = {sub:mode === 'admin' ? 'demo-admin' : 'demo-buyer',email:mode === 'admin' ? 'Seller demo' : 'Buyer demo',name:mode === 'admin' ? 'Demo seller' : 'Demo buyer',role:mode};
   uncertainSave = false; await start();
 });
@@ -864,18 +910,6 @@ $('adminPasswordForm')?.addEventListener('submit',async(event)=>{
 });
 
 
-async function enterGuestMode() {
-  if ($('enterDemo').disabled) return;
-  $('enterDemo').disabled=true; $('signInStatus').textContent='Opening guest access...';
-  try {
-    const response=await fetch('/api/auth/guest',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
-    const result=await response.json();
-    if(!response.ok)throw new Error(result.error || 'Guest access could not connect. Please try again.');
-    $('buyerPasswordForm')?.reset();
-    guestMode=true; buyerAccountMode=false; demoMode=false; signedInUser=result.user; uncertainSave=false; await start();
-  } catch(error) { $('signInStatus').textContent=error.message; }
-  finally { $('enterDemo').disabled=false; }
-}
 
 
 function setBuyerRegistrationMode(value) {
@@ -901,7 +935,7 @@ async function loadBuyerAccess() {
     const response=await fetch('/api/auth/buyer/status',{cache:'no-store'});
     if(!response.ok)throw new Error('Could not check your account. Reload this page to try again.');
     const result=await response.json();
-    if(result.user){signedInUser=result.user;buyerAccountMode=true;guestMode=false;demoMode=false;await start();return true;}
+    if(result.user){signedInUser=result.user;buyerAccountMode=true;demoMode=false;await start();return true;}
   } catch(error){$('buyerAuthStatus').textContent=error.message;$('buyerAuthStatus').hidden=false;}
   finally{$('buyerCredentials').disabled=false;$('toggleBuyerRegistration').disabled=false;}
   return false;
@@ -911,14 +945,14 @@ $('buyerPasswordForm')?.addEventListener('submit',async(event)=>{
   event.preventDefault(); if(buyerAuthPending)return;
   const payload={username:$('buyerUsername').value,password:$('buyerPassword').value};
   if(buyerRegistrationMode){payload.name=$('buyerDisplayName').value;payload.confirmPassword=$('buyerConfirmPassword').value;}
-  buyerAuthPending=true; $('buyerCredentials').disabled=true; $('toggleBuyerRegistration').disabled=true; $('enterDemo').disabled=true; $('buyerAuthStatus').hidden=true;
+  buyerAuthPending=true; $('buyerCredentials').disabled=true; $('toggleBuyerRegistration').disabled=true; $('buyerAuthStatus').hidden=true;
   try {
     const response=await fetch(buyerRegistrationMode?'/api/auth/buyer/register':'/api/auth/buyer/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     const result=await response.json();if(!response.ok)throw new Error(result.error || 'Could not log in. Please try again.');
-    $('buyerPasswordForm').reset(); signedInUser=result.user; buyerAccountMode=true; guestMode=false;demoMode=false;uncertainSave=false;await start();
+    $('buyerPasswordForm').reset(); signedInUser=result.user; buyerAccountMode=true;demoMode=false;uncertainSave=false;await start();
   } catch(error){
     $('buyerPassword').value='';$('buyerConfirmPassword').value='';$('buyerAuthStatus').textContent=error.message;$('buyerAuthStatus').hidden=false;
   } finally {
-    buyerAuthPending=false;$('buyerCredentials').disabled=false;$('toggleBuyerRegistration').disabled=false;$('enterDemo').disabled=false;
+    buyerAuthPending=false;$('buyerCredentials').disabled=false;$('toggleBuyerRegistration').disabled=false;
   }
 });
