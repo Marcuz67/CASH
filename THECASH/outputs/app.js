@@ -84,7 +84,7 @@ function normalize(saved) {
   const defaults = newStore();
   return { ...defaults, ...saved, profile: { ...defaults.profile, ...saved?.profile },
     profitGoals: { ...defaults.profitGoals, ...saved?.profitGoals },
-    products: (saved?.products || []).map((product) => ({ sold: 0, threshold: 5, cost: 0, saleEnabled: true, saleLimit: 5, ...product })),
+    products: (saved?.products || []).map((product) => ({ sold: 0, threshold: 5, cost: 0, saleEnabled: true, ...product })),
     activity: saved?.activity || [] };
 }
 function toast(message) {
@@ -281,7 +281,7 @@ function filteredProducts(search, category) {
 function renderCatalog() {
   const products = filteredProducts('salesSearch', 'salesCategory').filter((product) => product.saleEnabled);
   $('catalogCount').textContent = `${products.length} product${products.length === 1 ? '' : 's'}`;
-  $('productCatalog').innerHTML = products.length ? products.map((product) => `<article class="product-card">${product.photo ? `<img class="catalog-photo" src="${esc(product.photo)}" alt="${esc(product.name)}" loading="lazy">` : `<div class="catalog-placeholder" aria-hidden="true">${esc(product.category)}</div>`}<div class="product-card-content"><span class="category">${esc(product.category)}</span><h2>${esc(product.name)}</h2><div class="product-price">${money(product.price)}</div><div class="availability">${product.stock === 0 ? 'Out of stock' : `${product.stock} available`}</div><div class="purchase-limit">Maximum ${product.saleLimit} per purchase</div><button type="button" class="primary" data-action="sell" data-id="${esc(product.id)}" ${product.stock < 1 || saving || uncertainSave ? 'disabled' : ''}>${product.stock < 1 ? 'Out of stock' : mode === 'buyer' ? 'Buy item' : 'Record sale'}</button></div></article>`).join('') : empty(mode === 'buyer' ? 'No products are currently offered for sale. Please check again later.' : 'No matching products are enabled for sale. Set Buyer availability in Inventory.');
+  $('productCatalog').innerHTML = products.length ? products.map((product) => `<article class="product-card">${product.photo ? `<img class="catalog-photo" src="${esc(product.photo)}" alt="${esc(product.name)}" loading="lazy">` : `<div class="catalog-placeholder" aria-hidden="true">${esc(product.category)}</div>`}<div class="product-card-content"><span class="category">${esc(product.category)}</span><h2>${esc(product.name)}</h2><div class="product-price">${money(product.price)}</div><div class="availability">${product.stock === 0 ? 'Out of stock' : `${product.stock} available`}</div><button type="button" class="primary" data-action="sell" data-id="${esc(product.id)}" ${product.stock < 1 || saving || uncertainSave ? 'disabled' : ''}>${product.stock < 1 ? 'Out of stock' : mode === 'buyer' ? 'Buy item' : 'Record sale'}</button></div></article>`).join('') : empty(mode === 'buyer' ? 'No products are currently offered for sale. Please check again later.' : 'No matching products are enabled for sale. Set Buyer availability in Inventory.');
 }
 
 function renderInventory() {
@@ -289,7 +289,7 @@ function renderInventory() {
   const low = state.products.filter((product) => product.stock <= product.threshold);
   $('lowStockBadge').textContent = low.length; $('lowStockBadge').hidden = low.length === 0;
   $('inventorySummary').textContent = `${state.products.length} products | ${state.products.reduce((sum, product) => sum + product.stock, 0)} units in stock | ${low.length} stock alerts`;
-  $('inventoryTable').innerHTML = table(['Product', 'Stock', 'Unit cost', 'Selling price', 'Buyer sale', 'Limit / purchase', 'Status', 'Actions'], products.map((product) => `<tr><td>${productCell(product)}</td><td>${product.stock}</td><td>${money(product.cost)}</td><td>${money(product.price)}</td><td><span class="badge ${product.saleEnabled ? 'ok' : 'paused'}">${product.saleEnabled ? 'For sale' : 'Paused'}</span></td><td>${product.saleLimit}</td><td>${stockBadge(product)}</td><td><div class="row-actions"><button type="button" data-action="toggleSale" data-id="${esc(product.id)}">${product.saleEnabled ? 'Pause sale' : 'Offer for sale'}</button><button type="button" data-action="receive" data-id="${esc(product.id)}">Receive</button><button type="button" data-action="edit" data-id="${esc(product.id)}">Edit</button><button type="button" class="danger" data-action="remove" data-id="${esc(product.id)}">Remove</button></div></td></tr>`), 'No products found. Use Add product to create an item.');
+  $('inventoryTable').innerHTML = table(['Product', 'Stock', 'Unit cost', 'Selling price', 'Buyer sale', 'Status', 'Actions'], products.map((product) => `<tr><td>${productCell(product)}</td><td>${product.stock}</td><td>${money(product.cost)}</td><td>${money(product.price)}</td><td><span class="badge ${product.saleEnabled ? 'ok' : 'paused'}">${product.saleEnabled ? 'For sale' : 'Paused'}</span></td><td>${stockBadge(product)}</td><td><div class="row-actions"><button type="button" data-action="toggleSale" data-id="${esc(product.id)}">${product.saleEnabled ? 'Pause sale' : 'Offer for sale'}</button><button type="button" data-action="receive" data-id="${esc(product.id)}">Receive</button><button type="button" data-action="edit" data-id="${esc(product.id)}">Edit</button><button type="button" class="danger" data-action="remove" data-id="${esc(product.id)}">Remove</button></div></td></tr>`), 'No products found. Use Add product to create an item.');
 }
 function renderOverview() {
   const now = new Date(); const month = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
@@ -348,7 +348,7 @@ function openProduct(id = '') {
   $('productDialogTitle').textContent = product ? 'Edit product' : 'Add product';
   $('productName').value = product?.name || ''; $('productCategory').value = product?.category || '';
   $('productStock').value = product?.stock ?? 0; $('productThreshold').value = product?.threshold ?? 5;
-  $('productSaleEnabled').value = String(product?.saleEnabled ?? true); $('productSaleLimit').value = product?.saleLimit ?? 5;
+  $('productSaleEnabled').value = String(product?.saleEnabled ?? true);
   $('productPrice').value = product?.price ?? ''; $('productCost').value = product?.cost ?? '';
   productPhoto = product?.photo || null; preview('productPhotoPreview', productPhoto);
   $('productDialog').showModal(); $('productName').focus();
@@ -366,7 +366,6 @@ function updateSale() {
   const product = byId($('saleProductId').value);
   if (!product || !product.saleEnabled) {
     $('saleAvailability').textContent = 'This product is no longer offered for sale.';
-    $('saleLimitNote').textContent = 'Close this form and choose another product.';
     $('saleQuantity').max = 0; $('saleTotal').textContent = money(0); $('confirmSale').disabled = true;
     return;
   }
@@ -374,8 +373,7 @@ function updateSale() {
   preview('saleProductPhoto', product.photo || null);
   $('saleProductPhoto').alt = product.name;
   $('saleAvailability').textContent = `${product.stock} available | ${money(product.price)} each`;
-  $('saleQuantity').max = Math.min(product.stock, product.saleLimit);
-  $('saleLimitNote').textContent = `Admin limit: ${product.saleLimit} per purchase. You can buy up to ${Math.min(product.stock, product.saleLimit)} right now.`;
+  $('saleQuantity').max = product.stock;
   $('saleTotal').textContent = money(product.price * Number($('saleQuantity').value || 0));
 }
 function openReceive(id) {
@@ -403,18 +401,17 @@ async function saveProduct(event) {
   const id = $('productId').value;
   const values = { name: $('productName').value.trim(), category: $('productCategory').value.trim(),
     stock: Number($('productStock').value), threshold: Number($('productThreshold').value),
-    price: Number($('productPrice').value), cost: Number($('productCost').value), saleEnabled: $('productSaleEnabled').value === 'true', saleLimit: Number($('productSaleLimit').value) };
+    price: Number($('productPrice').value), cost: Number($('productCost').value), saleEnabled: $('productSaleEnabled').value === 'true' };
   const image = productPhoto;
   const saved = await commit((next) => {
     if (!values.name || !values.category) throw new Error('Enter a product name and category.');
     requireInteger(values.stock, 0, 'Stock'); requireInteger(values.threshold, 0, 'Restock level');
-    requireInteger(values.saleLimit, 1, 'Purchase limit');
-    if (values.saleLimit > 1000000) throw new Error('The purchase limit cannot exceed 1,000,000.');
     requireAmount(values.price, 'Selling price'); requireAmount(values.cost, 'Unit cost');
     const existing = id ? next.products.find((product) => product.id === id) : null;
     if (id && !existing) throw new Error('This product was removed on another page.');
     const product = existing || { id: `p${crypto.randomUUID().replace(/-/g, '')}`, sold: 0 };
     Object.assign(product, values);
+    delete product.saleLimit;
     if (image) product.photo = image; else delete product.photo;
     if (!existing) next.products.push(product);
   });
@@ -427,7 +424,6 @@ async function saveSale(event) {
   try {
     requireInteger(quantity, 1, 'Quantity');
     if (!product || !product.saleEnabled) throw new Error('This item is not currently for sale.');
-    if (quantity > product.saleLimit) throw new Error(`This item is limited to ${product.saleLimit} per purchase.`);
     if (quantity > product.stock) throw new Error('That quantity is not available in stock.');
   } catch (error) { toast(error.message); return; }
   setBusy(true);
@@ -676,7 +672,7 @@ function clearPrivateView() {
   productPhoto = null; storePhoto = null; settingsDirty = false; uncertainSave = false;
   $('syncNotice').hidden = true;
   for (const id of ['productCatalog','inventoryTable','overviewSales','stockAlerts','reportTable','rankingsTable','myPurchasesTable','overviewStats','accountingStats','weekChart']) $(id).replaceChildren();
-  for (const id of ['purchaseReceiptText','weekSummary','inventorySummary','reportSummary','signedInAccount','saleProductName','saleAvailability','saleLimitNote','saleTotal']) $(id).textContent = '';
+  for (const id of ['purchaseReceiptText','weekSummary','inventorySummary','reportSummary','signedInAccount','saleProductName','saleAvailability','saleTotal']) $(id).textContent = '';
   $('settingsForm').reset(); $('productForm').reset();
   $('adminPasswordForm')?.reset(); $('buyerPasswordForm')?.reset();
   preview('storePhotoPreview', null); preview('productPhotoPreview', null); preview('saleProductPhoto', null);
@@ -776,15 +772,15 @@ function demoStoreDefaults() {
   const data = newStore();
   data.profile = { owner: 'Demo owner', store: 'C.A.S.H. Demo Store', location: 'Sample store' };
   data.products = [
-    ['rice','White rice - 1 kg','Pantry',50,58,45,10,5],
-    ['milk','Fresh milk - 1 L','Drinks',18,89,68,5,4],
-    ['eggs','Eggs - per piece','Produce',60,10,7,12,12],
-    ['bread','Bread loaf','Bakery',20,55,38,5,3],
-    ['water','Bottled water - 500 ml','Drinks',40,20,12,10,6],
-    ['noodles','Instant noodles','Pantry',36,18,12,8,6],
-    ['coffee','Coffee sachet','Pantry',48,12,8,10,10],
-    ['soap','Dishwashing liquid - 250 ml','Household',16,55,38,4,3],
-  ].map(([id,name,category,stock,price,cost,threshold,saleLimit]) => ({id:`demo_${id}`,name,category,stock,price,cost,threshold,saleLimit,saleEnabled:true,sold:0,photo:`/assets/products/${id}.png`}));
+    ['rice','White rice - 1 kg','Pantry',50,58,45,10],
+    ['milk','Fresh milk - 1 L','Drinks',18,89,68,5],
+    ['eggs','Eggs - per piece','Produce',60,10,7,12],
+    ['bread','Bread loaf','Bakery',20,55,38,5],
+    ['water','Bottled water - 500 ml','Drinks',40,20,12,10],
+    ['noodles','Instant noodles','Pantry',36,18,12,8],
+    ['coffee','Coffee sachet','Pantry',48,12,8,10],
+    ['soap','Dishwashing liquid - 250 ml','Household',16,55,38,4],
+  ].map(([id,name,category,stock,price,cost,threshold]) => ({id:`demo_${id}`,name,category,stock,price,cost,threshold,saleEnabled:true,sold:0,photo:`/assets/products/${id}.png`}));
   data.productPhotosVersion = 1;
   return { version:1, revision:0, state:data };
 }
@@ -820,7 +816,7 @@ async function purchaseRequest(payload) {
   if (current.revision !== payload.revision) return {ok:false,status:409,json:async()=>({error:'Demo stock changed in another tab.'})};
   const next = structuredClone(current.state); const product = next.products.find(item => item.id === payload.productId);
   if (!product || !product.saleEnabled) error = 'This item is not offered for sale.';
-  else if (!Number.isSafeInteger(payload.quantity) || payload.quantity < 1 || payload.quantity > product.stock || payload.quantity > product.saleLimit) error = 'Choose a quantity within the stock and purchase limit.';
+  else if (!Number.isSafeInteger(payload.quantity) || payload.quantity < 1 || payload.quantity > product.stock) error = 'Choose a whole quantity within available stock.';
   if (error) return {ok:false,status:400,json:async()=>({error})};
   const quantity = payload.quantity;
   const receipt = {id:`DEMO-${crypto.randomUUID().replace(/-/g,'')}`,productId:product.id,name:product.name,qty:quantity,date:Date.now(),unitPrice:product.price,unitCost:product.cost,revenue:round(quantity*product.price),grossProfit:round(quantity*(product.price-product.cost)),buyerId:signedInUser.sub,buyerName:signedInUser.name};

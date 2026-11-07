@@ -124,7 +124,6 @@ function validateState(state) {
     if (!Number.isSafeInteger(product.stock) || product.stock < 0 || !Number.isSafeInteger(product.sold) || product.sold < 0) return false;
     if (![product.price, product.cost, product.threshold].every(nonnegative)) return false;
     if (product.saleEnabled !== undefined && typeof product.saleEnabled !== 'boolean') return false;
-    if (product.saleLimit !== undefined && (!Number.isSafeInteger(product.saleLimit) || product.saleLimit < 1 || product.saleLimit > 1000000)) return false;
     if (product.emoji && (typeof product.emoji !== 'string' || /[<>"'&]/.test(product.emoji))) return false;
     if (product.photo && (typeof product.photo !== 'string' || (!/^data:image\/(png|jpeg|webp);base64,[a-zA-Z0-9+/=]+$/.test(product.photo)
       && !/^\/assets\/products\/(rice|milk|eggs|bread|water|noodles|coffee|soap)\.png$/.test(product.photo)))) return false;

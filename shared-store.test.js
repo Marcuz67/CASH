@@ -85,7 +85,7 @@ test('buyer and admin share durable state and concurrent writes cannot overwrite
 });
 
 
-test('server enforces offered products, purchase limits, stock, and prices', async (t) => {
+test('server enforces offered products, stock, prices, and concurrent purchases', async (t) => {
   const service = await boot(':memory:');
   t.after(() => service.stop());
   const read = () => service.fetch('/api/shop').then(response => response.json());
@@ -93,34 +93,36 @@ test('server enforces offered products, purchase limits, stock, and prices', asy
   const buy = (data) => service.fetch('/api/sales', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
   let current = await read();
   const product = current.state.products[0];
-  product.stock = 3; product.saleLimit = 2; product.saleEnabled = false;
+  product.stock = 3; product.saleLimit = 1; product.saleEnabled = false;
   assert.equal((await put(current)).status, 200);
   let catalog = await service.fetch('/api/catalog').then(response => response.json());
   assert.ok(!catalog.state.products.some(item => item.id === product.id));
-  assert.ok(catalog.state.products.every(item => item.cost === undefined && item.sold === undefined));
+  assert.ok(catalog.state.products.every(item => item.cost === undefined && item.sold === undefined && item.saleLimit === undefined));
   assert.equal(catalog.state.activity, undefined);
   assert.equal((await buy({ productId: product.id, quantity: 1, revision: catalog.revision })).status, 400);
   current = await read(); current.state.products[0].saleEnabled = true;
   assert.equal((await put(current)).status, 200);
   current = await read();
-  for (const quantity of [0, -1, 1.5, 3, 100]) {
+  for (const quantity of [0, -1, 1.5, 4, 100]) {
     assert.equal((await buy({ productId: product.id, quantity, revision: current.revision })).status, 400);
   }
-  const purchase = await buy({ productId: product.id, quantity: 1, revision: current.revision, price: 0, unitCost: 0 });
+  const purchase = await buy({ productId: product.id, quantity: 2, revision: current.revision, price: 0, unitCost: 0 });
   assert.equal(purchase.status, 200);
   const receipt = (await purchase.json()).receipt;
-  assert.equal(receipt.revenue, product.price);
+  assert.equal(receipt.revenue, product.price * 2);
   assert.equal(receipt.unitCost, undefined); assert.equal(receipt.grossProfit, undefined);
-  current = await read(); assert.equal(current.state.products[0].stock, 2);
+  current = await read(); assert.equal(current.state.products[0].stock, 1);
   assert.equal(current.state.activity[0].unitCost, product.cost);
+  // A legacy saleLimit value must not cap purchases; stock remains the limit.
+  current.state.products[0].stock = 3;
+  assert.equal((await put(current)).status, 200);
+  current = await read();
   // Two simultaneous requests with one revision: exactly one can deduct stock.
   const responses = await Promise.all([buy({ productId: product.id, quantity: 2, revision: current.revision }), buy({ productId: product.id, quantity: 2, revision: current.revision })]);
   assert.deepEqual(responses.map(response => response.status).sort(), [200, 409]);
-  current = await read(); assert.equal(current.state.products[0].stock, 0);
-  assert.equal((await buy({ productId: product.id, quantity: 1, revision: current.revision })).status, 400);
-  // Admin cannot save invalid per-purchase limits, and an intentionally empty shop stays empty.
-  const invalid = structuredClone(current); invalid.state.products[0].saleLimit = 0;
-  assert.equal((await put(invalid)).status, 400);
+  current = await read(); assert.equal(current.state.products[0].stock, 1);
+  assert.equal((await buy({ productId: product.id, quantity: 2, revision: current.revision })).status, 400);
+  // An intentionally empty shop stays empty.
   current.state.products = []; assert.equal((await put(current)).status, 200);
   assert.equal((await read()).state.products.length, 0);
 });

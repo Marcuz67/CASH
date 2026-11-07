@@ -2,16 +2,16 @@ const { randomUUID } = require('node:crypto');
 
 function starterProducts() {
   return [
-    ['rice', 'White rice - 1 kg', 'Pantry', 50, 58, 45, 10, 5],
-    ['milk', 'Fresh milk - 1 L', 'Drinks', 18, 89, 68, 5, 4],
-    ['eggs', 'Eggs - per piece', 'Produce', 60, 10, 7, 12, 12],
-    ['bread', 'Bread loaf', 'Bakery', 20, 55, 38, 5, 3],
-    ['water', 'Bottled water - 500 ml', 'Drinks', 40, 20, 12, 10, 6],
-    ['noodles', 'Instant noodles', 'Pantry', 36, 18, 12, 8, 6],
-    ['coffee', 'Coffee sachet', 'Pantry', 48, 12, 8, 10, 10],
-    ['soap', 'Dishwashing liquid - 250 ml', 'Household', 16, 55, 38, 4, 3],
-  ].map(([id, name, category, stock, price, cost, threshold, saleLimit]) => ({
-    id: `sample_${id}`, name, category, stock, price, cost, threshold, saleLimit, saleEnabled: true, sold: 0,
+    ['rice', 'White rice - 1 kg', 'Pantry', 50, 58, 45, 10],
+    ['milk', 'Fresh milk - 1 L', 'Drinks', 18, 89, 68, 5],
+    ['eggs', 'Eggs - per piece', 'Produce', 60, 10, 7, 12],
+    ['bread', 'Bread loaf', 'Bakery', 20, 55, 38, 5],
+    ['water', 'Bottled water - 500 ml', 'Drinks', 40, 20, 12, 10],
+    ['noodles', 'Instant noodles', 'Pantry', 36, 18, 12, 8],
+    ['coffee', 'Coffee sachet', 'Pantry', 48, 12, 8, 10],
+    ['soap', 'Dishwashing liquid - 250 ml', 'Household', 16, 55, 38, 4],
+  ].map(([id, name, category, stock, price, cost, threshold]) => ({
+    id: `sample_${id}`, name, category, stock, price, cost, threshold, saleEnabled: true, sold: 0,
     photo: `/assets/products/${id}.png`,
   }));
 }
@@ -44,7 +44,6 @@ async function initializeCatalog(store) {
   throw new Error('Could not initialize the catalog after concurrent updates.');
 }
 
-const saleLimit = product => product.saleLimit ?? 5;
 function publicCatalog(data) {
   const state = data.state || emptyStore();
   return { revision: data.revision, state: {
@@ -52,7 +51,7 @@ function publicCatalog(data) {
     sampleCatalog: state.sampleCatalog === true,
     products: state.products.filter(product => product.saleEnabled !== false).map(product => ({
       id: product.id, name: product.name, category: product.category, stock: product.stock, price: product.price,
-      saleEnabled: true, saleLimit: saleLimit(product), ...(product.photo ? { photo: product.photo } : {}),
+      saleEnabled: true, ...(product.photo ? { photo: product.photo } : {}),
     })),
   } };
 }
@@ -66,7 +65,6 @@ function recordPurchase(data, request, user) {
   const next = structuredClone(data.state);
   const product = next?.products.find(item => item.id === request.productId);
   if (!product || product.saleEnabled === false) return { status: 400, error: 'This product is not available for sale.' };
-  if (request.quantity > saleLimit(product)) return { status: 400, error: `This item is limited to ${saleLimit(product)} per purchase.` };
   if (request.quantity > product.stock) return { status: 400, error: 'The requested quantity exceeds available stock.' };
   const round = value => Math.round((value + Number.EPSILON) * 100) / 100;
   const sale = { id: `R${randomUUID().replace(/-/g, '')}`, productId: product.id, name: product.name,

@@ -37,7 +37,7 @@ Run `npm run build` and `npm test` before sharing a change. Buyer and Admin have
 
 ## Offer items for sale
 
-In Admin, open Inventory and choose Edit. Set Buyer availability and Maximum units per purchase. Use Pause sale to remove an item from the buyer page while retaining inventory. Use Offer for sale to restore it. Receive adds delivered units; it does not change the selling limit. The server checks the limit and current stock for every purchase.
+In Admin, open Inventory and choose Edit to set Buyer availability. Use Pause sale to remove an item from the buyer page while retaining inventory. Use Offer for sale to restore it. Receive adds delivered units. Buyers can purchase any whole quantity up to available stock; the server checks availability and stock for every purchase.
 
 The catalog.js file creates starter products only for an empty, unused shop and validates purchases. The auth.js module protects editing and receipt APIs. Local password login is handled by local-admin.js and local-buyer.js. Future Google setup is described in GOOGLE_SIGN_IN_SETUP.md at the project root.
 

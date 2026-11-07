@@ -63,9 +63,9 @@ Render connection reference: https://render.com/docs/postgresql-creating-connect
 
 ## Selling controls
 
-Admin can offer or pause products, receive stock, set prices/costs, and choose maximum units per purchase. A paused product stays in inventory but disappears from the buyer catalog. Limits apply per purchase, not per person or per day.
+Admin can offer or pause products, receive stock, and set prices and costs. Buyers can purchase any whole quantity up to the available stock. A paused product stays in inventory but disappears from the buyer catalog.
 
-The server checks availability, stock, quantity limits, prices and concurrent updates. Reports use the price and cost saved with each sale; removing or editing a product does not rewrite its sales. Gross profit excludes operating expenses and taxes.
+The server checks availability, stock, prices and concurrent updates. Reports use the price and cost saved with each sale; removing or editing a product does not rewrite its sales. Gross profit excludes operating expenses and taxes.
 
 ## Optional Admin demo
 
